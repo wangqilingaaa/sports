@@ -9,7 +9,6 @@ import type { MuscleId } from '@/data/types'
 interface AnatomyMesh {
   mesh: THREE.Mesh
   id: MuscleId | null
-  base: THREE.Material | THREE.Material[]
 }
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/ecorche.meshopt.glb`
@@ -25,6 +24,26 @@ interface AnatomyModel {
 }
 
 let promise: Promise<AnatomyModel> | null = null
+
+/**
+ * 把模型自带的肉红色顶点色改成中性石膏调：
+ * 只取亮度做明暗层次，色相统一，于是模型静息时不再「满身通红」，
+ * 同时保留肌纤维纹理与肌腱高光。
+ */
+const NEUTRAL_TINT = new THREE.Color().setRGB(0.8, 0.73, 0.62)
+
+function neutralizeMuscleTint(meshes: AnatomyMesh[]) {
+  for (const { mesh } of meshes) {
+    const attr = mesh.geometry.getAttribute('color') as THREE.BufferAttribute | undefined
+    if (!attr) continue
+    for (let i = 0; i < attr.count; i++) {
+      const lum = 0.2126 * attr.getX(i) + 0.7152 * attr.getY(i) + 0.0722 * attr.getZ(i)
+      const shade = Math.min(1, 0.58 + 1.75 * lum)
+      attr.setXYZ(i, NEUTRAL_TINT.r * shade, NEUTRAL_TINT.g * shade, NEUTRAL_TINT.b * shade)
+    }
+    attr.needsUpdate = true
+  }
+}
 
 export function useAnatomyModel() {
   function load() {
@@ -51,8 +70,11 @@ export function useAnatomyModel() {
             if (!mesh.isMesh || !mesh.visible) return
             if (!String(mesh.userData?.layer ?? '').includes('muscle')) return
             const rawName = (mesh.userData?.name as string) ?? mesh.name ?? ''
-            muscles.push({ mesh, id: muscleIdForStructure(rawName), base: mesh.material })
+            muscles.push({ mesh, id: muscleIdForStructure(rawName) })
           })
+
+          // 静息态要中性、非红，先统一顶点色
+          neutralizeMuscleTint(muscles)
 
           loaded.value = true
           progress.value = 100

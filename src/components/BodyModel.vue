@@ -33,7 +33,6 @@ let mountedAt = 0
 interface MeshEntry {
   mesh: THREE.Mesh
   id: MuscleId | null
-  base: THREE.Material | THREE.Material[]
   pivot: THREE.Group | null
   role: Role | 'coverage' | null
 }
@@ -43,7 +42,24 @@ let flexEntries: MeshEntry[] = []
 let pickables: THREE.Mesh[] = []
 const byMesh = new WeakMap<THREE.Object3D, MeshEntry>()
 
-const MATERIALS = {
+type MaterialKey = 'rest' | 'focus' | 'primary' | 'secondary' | 'stabilizer' | 'coverage' | 'dim'
+
+const MATERIALS: Record<MaterialKey, THREE.MeshStandardMaterial> = {
+  // 静息态：中性石膏调（顶点色已在载入时去红），不吃任何高亮
+  rest: new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.6,
+    metalness: 0,
+  }),
+  // 筛选时被点中的那块肌群：与主动肌同款强调红
+  focus: new THREE.MeshStandardMaterial({
+    color: 0xb23a2b,
+    roughness: 0.42,
+    metalness: 0.02,
+    emissive: new THREE.Color(0x7d2114),
+    emissiveIntensity: 0.45,
+  }),
   primary: new THREE.MeshStandardMaterial({
     color: 0xb23a2b,
     roughness: 0.42,
@@ -65,22 +81,73 @@ const MATERIALS = {
     emissive: new THREE.Color(0x2f4a44),
     emissiveIntensity: 0.24,
   }),
+  // 筛选结果里「会带到」的其他肌群：只做淡提示，不能抢过被点中的那块
   coverage: new THREE.MeshStandardMaterial({
-    color: 0xc4695a,
-    roughness: 0.5,
-    metalness: 0.02,
-    emissive: new THREE.Color(0x6f2f24),
-    emissiveIntensity: 0.22,
-  }),
-  hover: new THREE.MeshStandardMaterial({
-    color: 0xd8ab97,
+    color: 0xd9a99a,
     roughness: 0.55,
     metalness: 0.02,
-    emissive: new THREE.Color(0x7a3f2e),
-    emissiveIntensity: 0.28,
+    emissive: new THREE.Color(0x9a6350),
+    emissiveIntensity: 0.18,
   }),
-  dim: new THREE.MeshStandardMaterial({ color: 0xe2d7c8, roughness: 0.95, metalness: 0 }),
-} as const
+  dim: new THREE.MeshStandardMaterial({ color: 0xded6c8, roughness: 0.92, metalness: 0 }),
+}
+
+/**
+ * 悬浮态：在「当前状态」基础上整体提亮 + 加强自发光，
+ * 因此静息时悬浮 = 点亮成强调红，选中动作时悬浮 = 该肌群的角色色更亮，
+ * 未参与动作的肌肉悬浮则呈柔和的暖调，不会误认成主动肌。
+ */
+const HOVER: Record<MaterialKey, THREE.MeshStandardMaterial> = {
+  rest: new THREE.MeshStandardMaterial({
+    color: 0xc0402c,
+    roughness: 0.42,
+    metalness: 0.02,
+    emissive: new THREE.Color(0x8f2b17),
+    emissiveIntensity: 0.6,
+  }),
+  primary: new THREE.MeshStandardMaterial({
+    color: 0xc23520,
+    roughness: 0.32,
+    metalness: 0.02,
+    emissive: new THREE.Color(0xa01d0b),
+    emissiveIntensity: 0.68,
+  }),
+  focus: new THREE.MeshStandardMaterial({
+    color: 0xc23520,
+    roughness: 0.32,
+    metalness: 0.02,
+    emissive: new THREE.Color(0xa01d0b),
+    emissiveIntensity: 0.68,
+  }),
+  secondary: new THREE.MeshStandardMaterial({
+    color: 0xe59a4c,
+    roughness: 0.36,
+    metalness: 0.02,
+    emissive: new THREE.Color(0xa8641a),
+    emissiveIntensity: 0.55,
+  }),
+  stabilizer: new THREE.MeshStandardMaterial({
+    color: 0x8cc0b3,
+    roughness: 0.4,
+    metalness: 0.02,
+    emissive: new THREE.Color(0x3f6f63),
+    emissiveIntensity: 0.5,
+  }),
+  coverage: new THREE.MeshStandardMaterial({
+    color: 0xdf9a80,
+    roughness: 0.48,
+    metalness: 0.02,
+    emissive: new THREE.Color(0x9c4529),
+    emissiveIntensity: 0.4,
+  }),
+  dim: new THREE.MeshStandardMaterial({
+    color: 0xe2a586,
+    roughness: 0.5,
+    metalness: 0.02,
+    emissive: new THREE.Color(0x9c5636),
+    emissiveIntensity: 0.5,
+  }),
+}
 
 /* ── 场景 ── */
 function initScene(el: HTMLElement) {
@@ -232,7 +299,7 @@ async function buildModel() {
         }
       }
 
-      const entry: MeshEntry = { mesh, id: item.id, base: item.base, pivot, role: null }
+      const entry: MeshEntry = { mesh, id: item.id, pivot, role: null }
       entries.push(entry)
       byMesh.set(mesh, entry)
       if (item.id) pickables.push(mesh)
@@ -257,21 +324,24 @@ function refreshMaterials() {
 
   for (const e of entries) {
     const hit = e.id ? hl.get(e.id) : undefined
-    let mat: THREE.Material | THREE.Material[] = e.base
-    e.role = null
+    let role: Role | 'coverage' | null = null
+    let key: MaterialKey = 'rest'
 
     if (hit) {
-      mat = MATERIALS[hit.role]
-      e.role = hit.role
-      if (hit.role === 'primary' && e.pivot) flexEntries.push(e)
+      role = hit.role
+      // 点选的那块肌群给强高亮，其余被这些动作带到的肌群只做淡提示
+      key = hit.focus ? 'focus' : hit.role
     } else if (dimmed) {
-      mat = MATERIALS.dim
-    } else if (e.id && hovered === e.id) {
-      mat = MATERIALS.hover
+      // 有选中动作时，未参与的肌肉退到背景色
+      key = 'dim'
     }
 
+    e.role = role
+    const mat = e.id && hovered === e.id ? HOVER[key] : MATERIALS[key]
+
     if (e.mesh.material !== mat) e.mesh.material = mat
-    if (e.pivot && e.role !== 'primary') e.pivot.scale.setScalar(1)
+    if (e.pivot && role !== 'primary') e.pivot.scale.setScalar(1)
+    if (role === 'primary' && e.pivot) flexEntries.push(e)
   }
   lastFlex = -1
 }
@@ -330,6 +400,14 @@ const hoveredMuscle = computed(() =>
   atlas.hoveredMuscle.value ? MUSCLE_MAP.get(atlas.hoveredMuscle.value) ?? null : null,
 )
 
+/** 图例随状态切换：点选肌群后要说明「强 / 淡」两档，搜索筛选时只有一档淡色 */
+const legend = computed(() => {
+  if (atlas.activeExercise.value) return 'roles'
+  if (atlas.muscleFilter.value) return 'focus'
+  if (atlas.hasFilters.value) return 'coverage'
+  return 'roles'
+})
+
 const hoveredHit = computed(() =>
   atlas.hoveredMuscle.value ? atlas.highlight.value.get(atlas.hoveredMuscle.value) ?? null : null,
 )
@@ -338,12 +416,30 @@ const readout = computed(() => {
   const m = hoveredMuscle.value
   if (m) {
     const hit = hoveredHit.value
+    if (hit) {
+      return {
+        zh: m.zh,
+        en: m.en,
+        tag: hit.focus
+          ? '选中肌群'
+          : hit.role === 'coverage'
+            ? '这些动作会带到'
+            : ROLE_LABEL[hit.role],
+        metric: hit.activation ? `${hit.activation}% 激活` : '—',
+        tone: hit.focus ? ('focus' as const) : hit.role,
+      }
+    }
+    // 悬浮了但不在当前动作/筛选里：静息态下给出可点击的提示，选动作时说明未参与
+    if (atlas.activeExercise.value) {
+      return { zh: m.zh, en: m.en, tag: '本动作未参与', metric: '—', tone: 'none' as const }
+    }
+    const n = atlas.muscleCounts.value[m.id] ?? 0
     return {
       zh: m.zh,
       en: m.en,
-      tag: hit ? (hit.role === 'coverage' ? '筛选中' : ROLE_LABEL[hit.role]) : '本动作未参与',
-      metric: hit?.activation ? `${hit.activation}% 激活` : '—',
-      tone: hit?.role ?? 'none',
+      tag: '点击筛选该肌群',
+      metric: `${n} 个动作`,
+      tone: 'coverage' as const,
     }
   }
   const ex = atlas.activeExercise.value
@@ -366,7 +462,7 @@ const readout = computed(() => {
     const mu = MUSCLE_MAP.get(filterId)
     if (mu) {
       const n = atlas.muscleCounts.value[filterId] ?? 0
-      return { zh: mu.zh, en: mu.en, tag: '筛选中的肌群', metric: `${n} 个动作`, tone: 'coverage' }
+      return { zh: mu.zh, en: mu.en, tag: '已选中肌群', metric: `${n} 个动作`, tone: 'focus' as const }
     }
   }
   return {
@@ -381,8 +477,10 @@ const readout = computed(() => {
 const toneColor = computed(() => {
   switch (readout.value.tone) {
     case 'primary':
-    case 'coverage':
+    case 'focus':
       return 'var(--accent)'
+    case 'coverage':
+      return '#b3776a'
     case 'secondary':
       return 'var(--amber)'
     case 'stabilizer':
@@ -463,7 +561,7 @@ onBeforeUnmount(() => {
   controls?.dispose()
   renderer?.dispose()
   renderer?.domElement.remove()
-  for (const m of Object.values(MATERIALS)) m.dispose()
+  for (const m of [...Object.values(MATERIALS), ...Object.values(HOVER)]) m.dispose()
   renderer = null
   scene = null
   camera = null
@@ -494,9 +592,18 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="stage-legend">
-      <span class="legend-item"><i class="legend-dot" style="background: var(--accent)"></i>主动肌</span>
-      <span class="legend-item"><i class="legend-dot" style="background: #d4803c"></i>协同肌</span>
-      <span class="legend-item"><i class="legend-dot" style="background: #6e948b"></i>稳定肌</span>
+      <template v-if="legend === 'focus'">
+        <span class="legend-item"><i class="legend-dot" style="background: var(--accent)"></i>选中肌群</span>
+        <span class="legend-item"><i class="legend-dot" style="background: #d9a99a"></i>动作涉及肌群</span>
+      </template>
+      <template v-else-if="legend === 'coverage'">
+        <span class="legend-item"><i class="legend-dot" style="background: #d9a99a"></i>筛选结果涉及肌群</span>
+      </template>
+      <template v-else>
+        <span class="legend-item"><i class="legend-dot" style="background: var(--accent)"></i>主动肌</span>
+        <span class="legend-item"><i class="legend-dot" style="background: #d4803c"></i>协同肌</span>
+        <span class="legend-item"><i class="legend-dot" style="background: #6e948b"></i>稳定肌</span>
+      </template>
     </div>
 
     <div class="stage-readout">

@@ -64,10 +64,10 @@ const activeExercise = computed(() => {
 
 /** 当前高亮集合：选中动作 → 精确激活；否则 → 筛选结果覆盖 */
 const highlight = computed(() => {
-  const map = new Map<MuscleId, { role: Role | 'coverage'; activation: number }>()
+  const map = new Map<MuscleId, { role: Role | 'coverage'; activation: number; focus: boolean }>()
   const ex = activeExercise.value
   if (ex) {
-    for (const h of ex.muscles) map.set(h.id, { role: h.role, activation: h.activation })
+    for (const h of ex.muscles) map.set(h.id, { role: h.role, activation: h.activation, focus: false })
     return map
   }
   const narrowed =
@@ -79,13 +79,17 @@ const highlight = computed(() => {
   for (const item of results.value) {
     for (const h of item.muscles) {
       const prev = map.get(h.id)
-      if (!prev) {
-        map.set(h.id, { role: 'coverage', activation: h.activation })
-      } else {
-        map.set(h.id, { role: 'coverage', activation: Math.max(prev.activation, h.activation) })
-      }
+      map.set(h.id, {
+        role: 'coverage',
+        activation: prev ? Math.max(prev.activation, h.activation) : h.activation,
+        focus: false,
+      })
     }
   }
+  // 点选的那块肌群单独标出来：模型上给强高亮，其余「会带到」的肌群只做淡提示
+  const focusId = muscleFilter.value
+  const self = focusId ? map.get(focusId) : undefined
+  if (self) self.focus = true
   return map
 })
 

@@ -961,8 +961,9 @@ a {
   right: calc(min(336px, 34vw) + 8px);
 }
 
+/* 选中肌群后图例要解释「强 / 淡」两档颜色，跟着模型让出浮层的位置 */
 .hero-stage.is-docked .stage-legend {
-  opacity: 0;
+  right: calc(min(336px, 34vw) + 16px);
   pointer-events: none;
 }
 
