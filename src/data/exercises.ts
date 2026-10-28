@@ -1,5 +1,6 @@
 import type { Exercise, MuscleHit, MuscleId, Role } from './types'
 import { MUSCLE_MAP } from './muscles'
+import { EXTRA_EXERCISES } from './exercises-ext'
 
 const m = (id: MuscleId, role: Role, activation: number): MuscleHit => ({ id, role, activation })
 
@@ -11,7 +12,8 @@ const m = (id: MuscleId, role: Role, activation: number): MuscleHit => ({ id, ro
  * - muscles 的 role 表示该动作中肌群的作用：主动肌 / 协同肌 / 稳定肌，activation 为该动作
  *   峰值收缩时相对最大随意收缩（MVC）的近似百分比，参考表面肌电研究的相对排序。
  */
-export const EXERCISES: Exercise[] = [
+/** 主库：手工整理的核心动作，覆盖各器械的经典动作 */
+const CORE_EXERCISES: Exercise[] = [
   /* ───────────────────────── 杠铃 ───────────────────────── */
   {
     id: 'barbell-bench-press',
@@ -1919,6 +1921,9 @@ export const EXERCISES: Exercise[] = [
     tempo: [1.4, 2.0],
   },
 ]
+
+/** 完整动作库：核心动作 + 从 workout-guide 素材扩充的动作 */
+export const EXERCISES: Exercise[] = [...CORE_EXERCISES, ...EXTRA_EXERCISES]
 
 /** 优先取主动肌，用于自动生成收缩说明 */
 function autoNote(ex: Exercise): string {
