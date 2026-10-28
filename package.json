@@ -1,0 +1,27 @@
+{
+  "name": "atlas-strength",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "sync:demo": "node scripts/sync-demo-assets.mjs"
+  },
+  "dependencies": {
+    "@bryllim/workout-guide": "^1.0.0",
+    "three": "^0.186.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
+  },
+  "description": "解剖图谱 · 力量训练动作库：按器械/肌群检索动作，人体肌肉高亮与收缩示意"
+}
