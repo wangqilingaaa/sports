@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ChevronDown } from '@lucide/vue'
 import { EQUIPMENT, EQUIPMENT_MAP, LEVEL_LABEL } from '@/data/equipment'
 import { MUSCLES, MUSCLE_MAP, REGION_LABEL, REGION_ORDER } from '@/data/muscles'
 import { useAtlas } from '@/composables/useAtlas'
@@ -33,7 +34,7 @@ const muscleName = computed(() =>
   <button class="filter-toggle" :class="{ 'is-open': open }" @click="open = !open">
     筛选条件
     <b v-if="activeCount">{{ activeCount }} 项生效</b>
-    <i>⌄</i>
+    <i><ChevronDown :size="14" :stroke-width="1.75" /></i>
   </button>
 
   <div class="filters" :class="{ 'is-open': open }">

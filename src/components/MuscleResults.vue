@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { X } from '@lucide/vue'
 import { useAtlas } from '@/composables/useAtlas'
 import { MUSCLE_MAP, ROLE_LABEL } from '@/data/muscles'
 import { EQUIPMENT_MAP, LEVEL_LABEL } from '@/data/equipment'
@@ -50,9 +51,7 @@ function hover(id: string | null) {
         <span class="dock-en">{{ muscle.en }}</span>
       </div>
       <button class="dock-close" title="取消肌群筛选" aria-label="取消肌群筛选" @click="emit('close')">
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4">
-          <path d="M2.5 2.5 9.5 9.5M9.5 2.5 2.5 9.5" />
-        </svg>
+        <X :size="11" />
       </button>
     </header>
 

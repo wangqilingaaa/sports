@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Pause, Play } from '@lucide/vue'
 import { useAtlas } from '@/composables/useAtlas'
 import { useContraction } from '@/composables/useContraction'
 import { EQUIPMENT_MAP, PATTERN_LABEL } from '@/data/equipment'
@@ -33,13 +34,8 @@ const cyclePct = computed(() => ((clock.value % cycleLen.value) / cycleLen.value
           :title="atlas.isPlaying.value ? '暂停' : '播放'"
           @click="atlas.isPlaying.value = !atlas.isPlaying.value"
         >
-          <svg v-if="atlas.isPlaying.value" width="9" height="9" viewBox="0 0 10 10">
-            <rect x="1.5" y="1.5" width="2.4" height="7" fill="currentColor" />
-            <rect x="6.1" y="1.5" width="2.4" height="7" fill="currentColor" />
-          </svg>
-          <svg v-else width="9" height="9" viewBox="0 0 10 10">
-            <path d="M2 1.4 L8.6 5 L2 8.6 Z" fill="currentColor" />
-          </svg>
+          <Pause v-if="atlas.isPlaying.value" :size="9" fill="currentColor" :stroke-width="1.4" />
+          <Play v-else :size="10" fill="currentColor" :stroke-width="1.4" />
         </button>
       </div>
     </header>

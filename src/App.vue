@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ChartColumn, CirclePlus, Search, X } from '@lucide/vue'
 import { useAtlas } from '@/composables/useAtlas'
 import { MUSCLE_MAP } from '@/data/muscles'
 import type { MuscleId } from '@/data/types'
@@ -8,16 +9,28 @@ import MuscleResults from './components/MuscleResults.vue'
 import FilterBar from './components/FilterBar.vue'
 import ExerciseList from './components/ExerciseList.vue'
 import ExerciseDetail from './components/ExerciseDetail.vue'
+import TrainingPlanView from './views/TrainingPlanView.vue'
 
 const atlas = useAtlas()
 const searchEl = ref<HTMLInputElement | null>(null)
 const scrolled = ref(false)
+const view = ref<'atlas' | 'plan'>('atlas')
 
 const drawerOpen = computed(() => atlas.drawerOpen.value)
 const QUICK_TAGS = ['卧推', '深蹲', '硬拉', '引体向上', '侧平举']
 
 function scrollTo(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** 顶栏导航用即时定位：全局 scroll-behavior: smooth 会让 behavior:auto 也走动画，
+ *  跨视图或长距离（页尾数据说明）时滚动会停在中途，看起来像没反应 */
+function jumpTo(top: number) {
+  window.scrollTo({ top, behavior: 'instant' })
+}
+
+function jumpToSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'instant', block: 'start' })
 }
 
 /** 进动作库：有选中动作时滚到「筛选栏下方」那张卡片，否则回区块顶部 */
@@ -49,6 +62,32 @@ function closeDrawer() {
   atlas.closeDrawer()
 }
 
+/** 切到训练计划页；抽屉关掉，避免盖住打卡界面 */
+function showPlan() {
+  atlas.closeDrawer()
+  view.value = 'plan'
+  if (location.hash !== '#plan') history.replaceState(null, '', '#plan')
+  // 等计划页替换动作库后再归位，否则会按旧页面的高度滚到中间
+  nextTick(() => jumpTo(0))
+}
+
+/** 回到动作库，并定位到指定区块 */
+function showAtlas(section: 'model' | 'library' = 'model') {
+  view.value = 'atlas'
+  history.replaceState(null, '', location.pathname + location.search)
+  nextTick(() => {
+    if (section === 'model') jumpTo(0)
+    else jumpToSection(section)
+  })
+}
+
+/** 从计划里的动作跳到解剖模型详情 */
+function openFromPlan(id: string) {
+  view.value = 'atlas'
+  history.replaceState(null, '', location.pathname + location.search)
+  nextTick(() => atlas.selectExercise(id))
+}
+
 /** 取消肌群筛选，收起模型旁的浮层 */
 function clearMuscle() {
   atlas.muscleFilter.value = null
@@ -61,6 +100,10 @@ function viewInModel() {
 }
 
 function onKey(e: KeyboardEvent) {
+  if (view.value === 'plan') {
+    if (e.key === 'Escape') showAtlas('model')
+    return
+  }
   const typing =
     document.activeElement === searchEl.value ||
     (document.activeElement as HTMLElement | null)?.tagName === 'INPUT'
@@ -87,6 +130,11 @@ function onScroll() {
   scrolled.value = window.scrollY > 12
 }
 
+function onHash() {
+  view.value = location.hash === '#plan' ? 'plan' : 'atlas'
+  jumpTo(0)
+}
+
 watch(atlas.query, () => {
   atlas.clearSelection()
 })
@@ -108,7 +156,10 @@ watch(atlas.selectedId, () => {
 onMounted(() => {
   window.addEventListener('keydown', onKey)
   window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('hashchange', onHash)
   onScroll()
+
+  if (location.hash === '#plan') view.value = 'plan'
 
   // 支持 ?ex=<动作 id> / ?q=<关键词> / ?eq=<器械 id> / ?m=<肌群 id> 直达
   const params = new URLSearchParams(location.search)
@@ -119,12 +170,13 @@ onMounted(() => {
   const m = params.get('m')
   if (m && MUSCLE_MAP.has(m as MuscleId)) atlas.muscleFilter.value = m as MuscleId
   const ex = params.get('ex')
-  if (ex) nextTick(() => atlas.selectExercise(ex))
+  if (ex && view.value === 'atlas') nextTick(() => atlas.selectExercise(ex))
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('hashchange', onHash)
   document.body.classList.remove('is-locked')
 })
 </script>
@@ -132,7 +184,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="app">
     <header class="topbar" :class="{ 'is-scrolled': scrolled }">
-      <a class="brand" href="#model" @click.prevent="scrollTo('model')">
+      <a class="brand" href="#model" @click.prevent="view === 'plan' ? showAtlas('model') : scrollTo('model')">
         <span class="brand-mark">解</span>
         <span>
           <span class="brand-name">解剖图谱</span>
@@ -141,35 +193,35 @@ onBeforeUnmount(() => {
       </a>
 
       <nav class="topnav">
-        <a href="#model" @click.prevent="scrollTo('model')">解剖模型</a>
-        <a href="#library" @click.prevent="scrollTo('library')">动作库</a>
-        <a href="#colophon" @click.prevent="scrollTo('colophon')">数据说明</a>
+        <a href="#model" @click.prevent="showAtlas('model')">解剖模型</a>
+        <a href="#library" @click.prevent="showAtlas('library')">动作库</a>
       </nav>
 
       <div class="topbar-tail">
         <span class="topbar-stat"><b>{{ atlas.totalExercises }}</b>动作</span>
         <span class="topbar-stat"><b>{{ atlas.totalMuscles }}</b>肌群</span>
         <span class="topbar-stat"><b>{{ atlas.totalEquipment }}</b>器械</span>
-        <button class="topbar-search-hint" @click="focusSearch">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-            <circle cx="7" cy="7" r="4.6" />
-            <path d="M10.4 10.4 14 14" />
-          </svg>
-          搜索 <kbd>⌘K</kbd>
+        <button class="plan-switch" :class="{ 'is-on': view === 'plan' }" @click="view === 'plan' ? showAtlas('model') : showPlan()">
+          <ChartColumn :size="13" :stroke-width="2" />
+          {{ view === 'plan' ? '动作库' : '训练计划' }}
         </button>
       </div>
     </header>
 
+    <TrainingPlanView
+      v-if="view === 'plan'"
+      @back="showAtlas('model')"
+      @open-exercise="openFromPlan"
+    />
+
+    <template v-if="view === 'atlas'">
     <!-- ─── HERO：人体肌群模型 ─── -->
     <section id="model" class="hero">
       <div class="hero-search-wrap">
         <div class="hero-search">
           <div class="hero-search-field">
             <span class="hero-search-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-                <circle cx="7" cy="7" r="4.6" />
-                <path d="M10.4 10.4 14 14" />
-              </svg>
+              <Search :size="16" :stroke-width="1.75" />
             </span>
             <input
               ref="searchEl"
@@ -183,9 +235,7 @@ onBeforeUnmount(() => {
             />
             <span v-if="!atlas.query.value" class="hero-search-hint">/ 聚焦</span>
             <button v-else class="hero-search-clear" title="清除" @click="atlas.query.value = ''">
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4">
-                <path d="M2.5 2.5 9.5 9.5M9.5 2.5 2.5 9.5" />
-              </svg>
+              <X :size="12" />
             </button>
           </div>
 
@@ -253,6 +303,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </footer>
+    </template>
 
     <!-- ─── 动作详情抽屉 ─── -->
     <Teleport to="body">
@@ -271,9 +322,7 @@ onBeforeUnmount(() => {
           <div class="drawer-bar">
             <span class="drawer-kicker">动作详解</span>
             <button class="drawer-close" aria-label="关闭详情" @click="closeDrawer">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4">
-                <path d="M2.5 2.5 9.5 9.5M9.5 2.5 2.5 9.5" />
-              </svg>
+              <X :size="13" />
             </button>
           </div>
 
@@ -283,10 +332,7 @@ onBeforeUnmount(() => {
 
           <div class="drawer-foot">
             <button class="model-btn" @click="viewInModel">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
-                <circle cx="8" cy="8" r="6.2" />
-                <path d="M8 4.6v6.8M4.6 8h6.8" />
-              </svg>
+              <CirclePlus :size="13" />
               在 3D 模型中查看
             </button>
           </div>

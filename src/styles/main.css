@@ -229,35 +229,6 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.topbar-search-hint {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--line-2);
-  border-radius: 2px;
-  background: rgba(253, 251, 246, 0.6);
-  color: var(--ink-3);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  transition: border-color 0.2s, color 0.2s;
-}
-
-.topbar-search-hint:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.topbar-search-hint kbd {
-  font-family: var(--mono);
-  font-size: 9px;
-  border: 1px solid var(--line);
-  padding: 1px 4px;
-  border-radius: 2px;
-  color: var(--ink-4);
-}
-
 /* ───────────── HERO ───────────── */
 .hero {
   position: relative;
@@ -1263,6 +1234,7 @@ a {
 }
 
 .filter-toggle i {
+  display: flex;
   margin-left: auto;
   transition: transform 0.25s var(--ease);
   color: var(--ink-3);
@@ -2257,8 +2229,7 @@ a {
     --gutter: 18px;
   }
 
-  .topbar-tail .topbar-stat,
-  .topbar-tail .topbar-search-hint {
+  .topbar-tail .topbar-stat {
     display: none;
   }
 
