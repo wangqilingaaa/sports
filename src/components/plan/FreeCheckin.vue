@@ -6,7 +6,7 @@ import { EQUIPMENT_MAP } from '@/data/equipment'
 import { parseReps, parseRpe } from '@/data/training-plan'
 import type { Exercise } from '@/data/types'
 
-const props = defineProps<{ date: string }>()
+const props = defineProps<{ sessionIndex: number }>()
 
 const training = useTraining()
 
@@ -72,7 +72,7 @@ function onBlur(event: FocusEvent) {
 function submit() {
   if (!selected.value) return
   training.upsertLog({
-    date: props.date,
+    sessionIndex: props.sessionIndex,
     exerciseId: selected.value.id,
     sets: form.value.sets,
     reps: form.value.reps,
@@ -100,9 +100,9 @@ function usePlanValues() {
     <header class="free-head">
       <div>
         <div class="plan-kicker">Ad-hoc · 自由打卡</div>
-        <h3 class="free-title">记录今天实际完成的动作</h3>
+        <h3 class="free-title">记录本次训练额外完成的动作</h3>
       </div>
-      <span v-if="saved" class="free-saved">已记入 {{ date }}</span>
+      <span v-if="saved" class="free-saved">已记入第 {{ sessionIndex }} 练</span>
     </header>
 
     <div class="free-search" @focusout="onBlur">
@@ -160,7 +160,7 @@ function usePlanValues() {
     </div>
 
     <p class="free-note">
-      自由打卡不需要跟随当天计划，记录会同样计入肌肉热图与周容量统计；自重动作重量填 0 即可。
+      自由打卡不需要跟随计划动作，记录会同样计入本次训练与肌肉热图；自重动作重量填 0 即可。
     </p>
   </section>
 </template>

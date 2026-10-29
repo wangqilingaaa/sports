@@ -2,22 +2,28 @@ import { computed, ref, watch } from 'vue'
 import { EXERCISE_MAP } from '@/data/exercises'
 import {
   buildPlan,
-  PLAN_WEEKS,
+  DAYS_TO_SPLIT,
+  LEVEL_VOLUME_SCALE,
+  PHASE_VOLUME_SCALE,
+  PLAN_ROUNDS,
+  SPLIT_MAP,
+  SPLITS,
+  VOLUME_GROUP_DEFS,
+  VOLUME_TARGETS,
   type DaysPerWeek,
   type GoalId,
   type Level,
   type PlanConfig,
-  type PlannedExercise,
-  type PlanWeek,
+  type SplitId,
 } from '@/data/training-plan'
 import type { MuscleId } from '@/data/types'
 
-export type HeatRange = 'week' | 'month' | 'all'
+export type HeatRange = 'session' | 'recent' | 'all'
 
 export interface LogEntry {
   id: string
-  /** 打卡日期 YYYY-MM-DD */
-  date: string
+  /** 全程第几次训练，从 1 开始 */
+  sessionIndex: number
   exerciseId: string
   sets: number
   reps: number
@@ -26,6 +32,7 @@ export interface LogEntry {
   rpe: number
   /** 来自计划的训练日 key；自由打卡为空 */
   sessionKey?: string
+  /** 记录时间，仅用于排序，界面不展示日期 */
   createdAt: number
 }
 
@@ -40,7 +47,7 @@ export interface MuscleLoad {
 }
 
 export interface LogInput {
-  date: string
+  sessionIndex: number
   exerciseId: string
   sets: number
   reps: number
@@ -49,101 +56,177 @@ export interface LogInput {
   sessionKey?: string
 }
 
-export interface WeekStats {
-  completed: number
-  planned: number
+export interface SessionStats {
   sets: number
   volume: number
   minutes: number
 }
 
-const STORAGE_KEY = 'atlas.training.v1'
+export type VolumeStatus = 'low' | 'ok' | 'high'
 
-export function dateKey(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+export interface VolumeAuditItem {
+  id: string
+  zh: string
+  sets: number
+  min: number
+  max: number
+  status: VolumeStatus
 }
 
-function parseDate(key: string): Date {
+const STORAGE_KEY = 'atlas.training.v1'
+
+function parseDateKey(key: string): Date {
   const [y, m, d] = key.split('-').map(Number)
   return new Date(y, (m ?? 1) - 1, d ?? 1)
 }
 
-export function addDays(key: string, days: number): string {
-  const d = parseDate(key)
-  d.setDate(d.getDate() + days)
-  return dateKey(d)
+/** 旧版计划把训练日固定在星期几；迁移旧记录时用它将日期换算成训练次序 */
+const LEGACY_WEEKDAY_OFFSETS: Record<DaysPerWeek, number[]> = {
+  2: [0, 3],
+  3: [0, 2, 4],
+  4: [0, 1, 3, 4],
+  5: [0, 1, 2, 4, 5],
+  6: [0, 1, 2, 3, 4, 5],
 }
 
-/** 取所在周的周一 */
-export function mondayOf(key: string): string {
-  const d = parseDate(key)
-  const offset = (d.getDay() + 6) % 7
-  d.setDate(d.getDate() - offset)
-  return dateKey(d)
-}
-
-export function formatShortDate(key: string): string {
-  const d = parseDate(key)
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-}
-
-const WEEKDAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-
-export function weekdayName(key: string): string {
-  const d = parseDate(key)
-  return WEEKDAY_NAMES[(d.getDay() + 6) % 7]
+interface LegacyLog {
+  id?: unknown
+  date?: unknown
+  sessionIndex?: unknown
+  exerciseId?: unknown
+  sets?: unknown
+  reps?: unknown
+  weight?: unknown
+  rpe?: unknown
+  sessionKey?: unknown
+  createdAt?: unknown
 }
 
 function defaultConfig(): PlanConfig {
   return {
     goal: 'hypertrophy',
     level: 2,
-    days: 4,
-    startDate: mondayOf(dateKey(new Date())),
+    split: 'ul',
   }
 }
 
 const VALID_GOALS: GoalId[] = ['hypertrophy', 'strength', 'recondition']
 const VALID_DAYS: DaysPerWeek[] = [2, 3, 4, 5, 6]
 const VALID_LEVELS: Level[] = [1, 2, 3]
+const VALID_SPLITS: SplitId[] = SPLITS.map((split) => split.id)
 
 const config = ref<PlanConfig>(defaultConfig())
 const logs = ref<LogEntry[]>([])
 
-/** 从本地存档恢复；损坏数据直接忽略，不阻断页面 */
+/** 旧版按日期存储的记录：用旧 startDate 折算成「第几次训练」 */
+function legacyIndexForDate(date: string, startDate: string, days: DaysPerWeek): number {
+  const diff = Math.floor(
+    (parseDateKey(date).getTime() - parseDateKey(startDate).getTime()) / 86400000,
+  )
+  if (diff < 0) return 1
+  const round = Math.min(PLAN_ROUNDS, Math.floor(diff / 7) + 1)
+  const d = parseDateKey(date)
+  const weekday = (d.getDay() + 6) % 7
+  const dayIndex = LEGACY_WEEKDAY_OFFSETS[days].indexOf(weekday)
+  // 自由记录可能落在非训练日，归入该轮第一个训练日，避免丢失
+  return (round - 1) * days + (dayIndex >= 0 ? dayIndex + 1 : 1)
+}
+
+function normalizeLog(
+  raw: LegacyLog,
+  legacyStart: string | null,
+  days: DaysPerWeek,
+): LogEntry | null {
+  if (
+    typeof raw.id !== 'string' ||
+    typeof raw.exerciseId !== 'string' ||
+    typeof raw.sets !== 'number' ||
+    typeof raw.reps !== 'number'
+  ) {
+    return null
+  }
+
+  let index: number | null = typeof raw.sessionIndex === 'number' ? raw.sessionIndex : null
+  if (index === null && typeof raw.date === 'string' && legacyStart) {
+    index = legacyIndexForDate(raw.date, legacyStart, days)
+  }
+  if (index === null || !Number.isFinite(index)) return null
+
+  const createdAt =
+    typeof raw.createdAt === 'number'
+      ? raw.createdAt
+      : typeof raw.date === 'string'
+        ? parseDateKey(raw.date).getTime()
+        : Date.now()
+  const total = PLAN_ROUNDS * days
+
+  return {
+    id: raw.id,
+    sessionIndex: Math.min(total, Math.max(1, Math.round(index))),
+    exerciseId: raw.exerciseId,
+    sets: raw.sets,
+    reps: raw.reps,
+    weight: typeof raw.weight === 'number' ? raw.weight : 0,
+    rpe: typeof raw.rpe === 'number' ? raw.rpe : 7,
+    sessionKey: typeof raw.sessionKey === 'string' ? raw.sessionKey : undefined,
+    createdAt,
+  }
+}
+
+/** 同一次训练的同个动作只保留一条记录，优先保留带计划标记的最新记录 */
+function dedupeLogs(list: LogEntry[]): LogEntry[] {
+  const map = new Map<string, LogEntry>()
+  for (const log of list) {
+    const key = `${log.sessionIndex}:${log.exerciseId}`
+    const prev = map.get(key)
+    if (!prev) {
+      map.set(key, log)
+      continue
+    }
+    const next = log.createdAt >= prev.createdAt ? log : prev
+    map.set(key, { ...next, sessionKey: next.sessionKey ?? prev.sessionKey })
+  }
+  return [...map.values()]
+}
+
+/** 从本地存档恢复；旧版按日期的记录会迁移成训练次序 */
 function hydrate() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
-    const parsed = JSON.parse(raw) as { config?: Partial<PlanConfig>; logs?: LogEntry[] }
+    const parsed = JSON.parse(raw) as { config?: Record<string, unknown>; logs?: unknown[] }
     const c = parsed.config
+    let legacyStart: string | null = null
+    let legacyDays: DaysPerWeek = SPLIT_MAP.get(config.value.split)?.days ?? 4
     if (c) {
-      if (c.goal && VALID_GOALS.includes(c.goal)) config.value.goal = c.goal
-      if (c.level && VALID_LEVELS.includes(c.level)) config.value.level = c.level
-      if (c.days && VALID_DAYS.includes(c.days)) config.value.days = c.days
+      if (typeof c.goal === 'string' && VALID_GOALS.includes(c.goal as GoalId)) {
+        config.value.goal = c.goal as GoalId
+      }
+      if (typeof c.level === 'number' && VALID_LEVELS.includes(c.level as Level)) {
+        config.value.level = c.level as Level
+      }
+      if (typeof c.days === 'number' && VALID_DAYS.includes(c.days as DaysPerWeek)) {
+        legacyDays = c.days as DaysPerWeek
+        config.value.split = DAYS_TO_SPLIT[legacyDays]
+      }
+      if (typeof c.split === 'string' && VALID_SPLITS.includes(c.split as SplitId)) {
+        config.value.split = c.split as SplitId
+        legacyDays = SPLIT_MAP.get(config.value.split)?.days ?? legacyDays
+      }
       if (typeof c.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.startDate)) {
-        config.value.startDate = mondayOf(c.startDate)
+        legacyStart = c.startDate
       }
     }
-    if (Array.isArray(parsed.logs)) logs.value = parsed.logs.filter(isLogEntry)
+    if (Array.isArray(parsed.logs)) {
+      logs.value = dedupeLogs(
+        parsed.logs
+          .map((entry) => normalizeLog(entry as LegacyLog, legacyStart, legacyDays))
+          .filter((entry): entry is LogEntry => !!entry),
+      )
+    }
   } catch {
     /* 存档不可用时按默认计划运行 */
   }
-}
-
-function isLogEntry(v: unknown): v is LogEntry {
-  if (!v || typeof v !== 'object') return false
-  const e = v as Partial<LogEntry>
-  return (
-    typeof e.id === 'string' &&
-    typeof e.date === 'string' &&
-    typeof e.exerciseId === 'string' &&
-    typeof e.sets === 'number' &&
-    typeof e.reps === 'number'
-  )
 }
 
 function persist() {
@@ -155,67 +238,81 @@ function persist() {
 }
 
 hydrate()
+persist()
 watch([config, logs], persist, { deep: true })
 
-function weekFromStart(start: string, today = dateKey(new Date())): number {
-  const diff = Math.floor((parseDate(today).getTime() - parseDate(start).getTime()) / 86400000)
-  return Math.min(PLAN_WEEKS, Math.max(1, Math.floor(diff / 7) + 1))
+const selectedIndex = ref(1)
+const heatRange = ref<HeatRange>('session')
+
+const plan = computed(() => buildPlan(config.value))
+const totalSessions = computed(() => plan.value.length)
+const activeSplit = computed(() => SPLIT_MAP.get(config.value.split) ?? SPLITS[0])
+const activeSession = computed(() => plan.value[selectedIndex.value - 1] ?? plan.value[0])
+const activeDay = computed(() => activeSession.value.day)
+
+/** 已完成的训练次序：该次训练存在带计划标记的打卡即视为完成 */
+const doneIndexes = computed(() => {
+  const set = new Set<number>()
+  for (const log of logs.value) {
+    if (log.sessionKey && log.sessionIndex <= totalSessions.value) set.add(log.sessionIndex)
+  }
+  return set
+})
+
+const completedCount = computed(() => doneIndexes.value.size)
+
+/** 下一次未完成的训练；全部完成时停留在最后一练 */
+const nextIndex = computed(() => {
+  for (let i = 1; i <= totalSessions.value; i++) {
+    if (!doneIndexes.value.has(i)) return i
+  }
+  return totalSessions.value
+})
+
+const allDone = computed(() => completedCount.value >= totalSessions.value)
+
+function sessionDone(index: number): boolean {
+  return doneIndexes.value.has(index)
 }
 
-const selectedWeek = ref<number>(weekFromStart(config.value.startDate))
-const selectedDay = ref(0)
-const heatRange = ref<HeatRange>('week')
-
-const plan = computed<PlanWeek[]>(() => buildPlan(config.value))
-const week = computed(() => plan.value[selectedWeek.value - 1])
-const selectedSession = computed(() => week.value.days[selectedDay.value] ?? week.value.days[0])
-
-/** 计划中某个训练日对应的真实日期 */
-function dateFor(weekNo: number, dayIndex: number): string {
-  const w = plan.value[weekNo - 1]
-  const day = w.days[dayIndex] ?? w.days[0]
-  return addDays(config.value.startDate, (weekNo - 1) * 7 + day.weekday)
+function logsForSession(index: number): LogEntry[] {
+  return logs.value.filter((l) => l.sessionIndex === index)
 }
 
-const activeDate = computed(() => dateFor(selectedWeek.value, selectedDay.value))
-
-const logDates = computed(() => new Set(logs.value.map((l) => l.date)))
-const sessionDates = computed(
-  () => new Set(logs.value.filter((l) => l.sessionKey).map((l) => l.date)),
-)
-
-function logsForDate(date: string): LogEntry[] {
-  return logs.value.filter((l) => l.date === date)
-}
-
-function logFor(date: string, exerciseId: string): LogEntry | null {
-  return logs.value.find((l) => l.date === date && l.exerciseId === exerciseId) ?? null
+function logFor(index: number, exerciseId: string): LogEntry | null {
+  return logs.value.find((l) => l.sessionIndex === index && l.exerciseId === exerciseId) ?? null
 }
 
 function lastLogFor(exerciseId: string): LogEntry | null {
   let latest: LogEntry | null = null
   for (const l of logs.value) {
     if (l.exerciseId !== exerciseId) continue
-    if (!latest || l.date > latest.date || (l.date === latest.date && l.createdAt > latest.createdAt)) {
-      latest = l
-    }
+    if (!latest || l.createdAt > latest.createdAt) latest = l
   }
   return latest
 }
 
 function upsertLog(input: LogInput) {
   const idx = logs.value.findIndex(
-    (l) => l.date === input.date && l.exerciseId === input.exerciseId,
+    (l) => l.sessionIndex === input.sessionIndex && l.exerciseId === input.exerciseId,
   )
   const clean = {
-    ...input,
+    sessionIndex: Math.max(1, Math.round(input.sessionIndex)),
+    exerciseId: input.exerciseId,
     sets: Math.max(1, Math.round(input.sets)),
     reps: Math.max(1, Math.round(input.reps)),
     weight: Math.max(0, Number(input.weight.toFixed(1))),
     rpe: Math.min(10, Math.max(4, input.rpe)),
+    sessionKey: input.sessionKey,
   }
   if (idx >= 0) {
-    logs.value[idx] = { ...logs.value[idx], ...clean }
+    const prev = logs.value[idx]
+    logs.value[idx] = {
+      ...prev,
+      ...clean,
+      // 自由打卡补记计划动作时保留计划标记，避免把已完成训练退回未完成
+      sessionKey: clean.sessionKey ?? prev.sessionKey,
+    }
     return
   }
   logs.value.push({
@@ -226,30 +323,6 @@ function upsertLog(input: LogInput) {
         : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: Date.now(),
   })
-}
-
-/** 按计划处方一键打卡，负重优先沿用上一次同动作记录 */
-function logByPlan(date: string, sessionKey: string, item: PlannedExercise, override?: Partial<LogInput>) {
-  upsertLog({
-    date,
-    sessionKey,
-    exerciseId: item.exerciseId,
-    sets: item.prescription.sets,
-    reps: parsePrescriptionReps(item.prescription.reps),
-    weight: lastLogFor(item.exerciseId)?.weight ?? 0,
-    rpe: parsePrescriptionRpe(item.prescription.rpe),
-    ...override,
-  })
-}
-
-function parsePrescriptionReps(reps: string): number {
-  const nums = reps.match(/\d+/g)?.map(Number) ?? [10]
-  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length)
-}
-
-function parsePrescriptionRpe(rpe: string): number {
-  const nums = rpe.match(/\d+/g)?.map(Number) ?? [7]
-  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length)
 }
 
 function removeLog(id: string) {
@@ -263,21 +336,28 @@ function effortFactor(rpe: number): number {
   return 0.7
 }
 
-/** 当前热图范围涉及的日期集合 */
-const heatDates = computed(() => {
+/** 当前热图范围涉及的训练次序 */
+const heatIndexes = computed(() => {
   if (heatRange.value === 'all') return null
-  if (heatRange.value === 'month') {
-    const from = addDays(dateKey(new Date()), -27)
-    return { from, to: dateKey(new Date()) }
+  if (heatRange.value === 'recent') {
+    return { from: Math.max(1, selectedIndex.value - 7), to: selectedIndex.value }
   }
-  const from = addDays(config.value.startDate, (selectedWeek.value - 1) * 7)
-  return { from, to: addDays(from, 6) }
+  return { from: selectedIndex.value, to: selectedIndex.value }
 })
 
 const heatLogs = computed(() => {
-  const range = heatDates.value
+  const range = heatIndexes.value
   if (!range) return logs.value
-  return logs.value.filter((l) => l.date >= range.from && l.date <= range.to)
+  return logs.value.filter((l) => l.sessionIndex >= range.from && l.sessionIndex <= range.to)
+})
+
+const heatScopeLabel = computed(() => {
+  if (heatRange.value === 'all') return '全部记录'
+  if (heatRange.value === 'recent') {
+    const from = Math.max(1, selectedIndex.value - 7)
+    return from === selectedIndex.value ? `第 ${from} 练` : `第 ${from}–${selectedIndex.value} 练`
+  }
+  return `第 ${selectedIndex.value} 练`
 })
 
 /** 肌群训练强度：有效组 = 组数 × 该动作对该肌群的激活占比 × RPE 系数 */
@@ -308,11 +388,8 @@ const heatMax = computed(() => Math.max(1, ...heatDetail.value.map((m) => m.sets
 
 const trainedMuscleCount = computed(() => heatDetail.value.filter((m) => m.sets > 0.15).length)
 
-const weekStats = computed<WeekStats>(() => {
-  const from = addDays(config.value.startDate, (selectedWeek.value - 1) * 7)
-  const to = addDays(from, 6)
-  const list = logs.value.filter((l) => l.date >= from && l.date <= to)
-  const done = new Set(list.filter((l) => l.sessionKey).map((l) => l.date))
+const sessionStats = computed<SessionStats>(() => {
+  const list = logs.value.filter((l) => l.sessionIndex === selectedIndex.value)
   let sets = 0
   let volume = 0
   let workSeconds = 0
@@ -322,74 +399,103 @@ const weekStats = computed<WeekStats>(() => {
     workSeconds += l.sets * (40 + effortFactor(l.rpe) * 20)
   }
   return {
-    completed: done.size,
-    planned: config.value.days,
     sets,
     volume: Math.round(volume),
     minutes: Math.round(workSeconds / 60),
   }
 })
 
-const streak = computed(() => {
-  let cursor = dateKey(new Date())
-  if (!logDates.value.has(cursor)) cursor = addDays(cursor, -1)
-  let days = 0
-  while (logDates.value.has(cursor)) {
-    days += 1
-    cursor = addDays(cursor, -1)
+/** 主动肌计 1 组、协同肌计 0.5 组；同一动作对同一肌群取最高一次，避免重复累计 */
+function muscleCredit(role: 'primary' | 'secondary' | 'stabilizer'): number {
+  if (role === 'primary') return 1
+  if (role === 'secondary') return 0.5
+  return 0
+}
+
+/** 当前轮的计划容量：按处方累计每肌群直接组，并按分期与水平折算目标区间 */
+const volumeAudit = computed<VolumeAuditItem[]>(() => {
+  const phase = activeSession.value.phase
+  const scale = PHASE_VOLUME_SCALE[phase.id] * LEVEL_VOLUME_SCALE[config.value.level]
+  const targets = VOLUME_TARGETS[config.value.goal]
+  const sessions = plan.value.filter((session) => session.round === activeSession.value.round)
+  const totals = new Map<string, number>()
+
+  for (const session of sessions) {
+    for (const item of session.day.exercises) {
+      // 代谢收尾不计入力量容量，避免把摆荡类动作算成臀部/腘绳组数
+      if (item.role === 'conditioning') continue
+      const exercise = EXERCISE_MAP.get(item.exerciseId)
+      if (!exercise) continue
+      for (const group of VOLUME_GROUP_DEFS) {
+        let credit = 0
+        for (const hit of exercise.muscles) {
+          if (!group.members.includes(hit.id)) continue
+          credit = Math.max(credit, muscleCredit(hit.role))
+        }
+        if (credit > 0) {
+          totals.set(group.id, (totals.get(group.id) ?? 0) + item.prescription.sets * credit)
+        }
+      }
+    }
   }
-  return days
+
+  return VOLUME_GROUP_DEFS.map((group) => {
+    const sets = Math.round((totals.get(group.id) ?? 0) * 10) / 10
+    const [minRaw, maxRaw] = targets[group.type]
+    const min = Math.max(1, Math.floor(minRaw * scale))
+    const max = Math.max(min, Math.ceil(maxRaw * scale))
+    const status: VolumeStatus = sets < min ? 'low' : sets > max ? 'high' : 'ok'
+    return { id: group.id, zh: group.zh, sets, min, max, status }
+  })
 })
 
-const completionRatio = computed(() =>
-  weekStats.value.planned ? weekStats.value.completed / weekStats.value.planned : 0,
-)
+/** 连续完成的训练次数：从最近一次完成往前数连续编号 */
+const streak = computed(() => {
+  const done = doneIndexes.value
+  let cursor = 0
+  for (const i of done) if (i > cursor) cursor = i
+  let count = 0
+  while (cursor > 0 && done.has(cursor)) {
+    count += 1
+    cursor -= 1
+  }
+  return count
+})
+
+/** 最近 4 练的完成率，用于给下一次训练提建议 */
+const recentRatio = computed(() => {
+  const done = doneIndexes.value
+  let latest = 0
+  for (const i of done) if (i > latest) latest = i
+  const to = latest || selectedIndex.value
+  const from = Math.max(1, to - 3)
+  let hits = 0
+  for (let i = from; i <= to; i++) if (done.has(i)) hits += 1
+  return hits / (to - from + 1)
+})
 
 const recommendation = computed(() => {
   if (!logs.value.length) {
-    return '还没有打卡记录：先按适应期的轻负荷完成两次训练，把动作轨迹和器械高度确定下来。'
+    return '还没有打卡记录：先从第 1 练开始，用适应期的轻负荷把动作轨迹和器械高度确定下来。'
   }
-  const ratio = completionRatio.value
+  const ratio = recentRatio.value
   if (ratio >= 0.8) {
-    return `本周完成度 ${Math.round(ratio * 100)}%：主项可 +2.5kg（下肢 +5kg），孤立动作每组多做 1–2 次。`
+    return `最近 4 练完成度 ${Math.round(ratio * 100)}%：主项可 +2.5kg（下肢 +5kg），孤立动作每组多做 1–2 次。`
   }
   if (ratio >= 0.5) {
-    return `本周完成度 ${Math.round(ratio * 100)}%：负荷保持不变，优先补齐组数与动作质量，再考虑加重量。`
+    return `最近 4 练完成度 ${Math.round(ratio * 100)}%：负荷保持不变，优先补齐组数与动作质量，再考虑加重量。`
   }
-  return `本周完成度 ${Math.round(ratio * 100)}%：先减一档负荷重新建立节奏，缺练时不要用跳周或加倍容量补偿。`
+  return `最近 4 练完成度 ${Math.round(ratio * 100)}%：先减一档负荷重新建立节奏，缺练时不要用加倍容量补偿。`
 })
-
-/** 某个训练周已完成的训练日数量 */
-function completedInWeek(weekNo: number): number {
-  const w = plan.value[weekNo - 1]
-  let done = 0
-  for (let i = 0; i < w.days.length; i++) {
-    if (sessionDates.value.has(dateFor(weekNo, i))) done += 1
-  }
-  return done
-}
 
 function setConfig(patch: Partial<PlanConfig>) {
   config.value = { ...config.value, ...patch }
-  if (patch.startDate) selectedWeek.value = 1
+  selectedIndex.value = Math.min(selectedIndex.value, totalSessions.value)
 }
 
-function restart(startDate = dateKey(new Date())) {
-  config.value.startDate = mondayOf(startDate)
-  selectedWeek.value = 1
-  selectedDay.value = 0
-}
-
-function syncToday() {
-  const today = dateKey(new Date())
-  const w = weekFromStart(config.value.startDate, today)
-  selectedWeek.value = w
-  const idx = plan.value[w - 1].days.findIndex((_, i) => dateFor(w, i) === today)
-  selectedDay.value = idx >= 0 ? idx : 0
-}
-
-function dayDone(weekNo: number, dayIndex: number): boolean {
-  return sessionDates.value.has(dateFor(weekNo, dayIndex))
+/** 跳到下一次未完成的训练 */
+function syncNext() {
+  selectedIndex.value = nextIndex.value
 }
 
 export function useTraining() {
@@ -397,31 +503,31 @@ export function useTraining() {
     config,
     logs,
     plan,
-    week,
-    selectedWeek,
-    selectedDay,
-    selectedSession,
-    activeDate,
+    totalSessions,
+    activeSplit,
+    selectedIndex,
+    activeSession,
+    activeDay,
     heatRange,
+    heatScopeLabel,
     heatDetail,
     heatScores,
     heatMax,
     trainedMuscleCount,
-    weekStats,
+    sessionStats,
+    volumeAudit,
     streak,
     recommendation,
-    completionRatio,
-    dateFor,
-    logsForDate,
+    nextIndex,
+    completedCount,
+    allDone,
+    sessionDone,
+    logsForSession,
     logFor,
     lastLogFor,
     upsertLog,
-    logByPlan,
     removeLog,
-    completedInWeek,
-    dayDone,
     setConfig,
-    restart,
-    syncToday,
+    syncNext,
   }
 }

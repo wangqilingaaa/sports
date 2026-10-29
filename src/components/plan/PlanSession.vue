@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
-import { formatShortDate, useTraining, weekdayName } from '@/composables/useTraining'
-import { parseReps, parseRpe, type PlanDay, type PlannedExercise } from '@/data/training-plan'
+import { useTraining } from '@/composables/useTraining'
+import { parseReps, parseRpe, type PlanSession, type PlannedExercise } from '@/data/training-plan'
 import { EXERCISE_MAP } from '@/data/exercises'
 import { EQUIPMENT_MAP } from '@/data/equipment'
 
 const props = defineProps<{
-  day: PlanDay
-  date: string
+  session: PlanSession
 }>()
 
 const emit = defineEmits<{
@@ -15,6 +14,9 @@ const emit = defineEmits<{
 }>()
 
 const training = useTraining()
+
+const day = computed(() => props.session.day)
+const sessionIndex = computed(() => props.session.index)
 
 interface RowForm {
   sets: number
@@ -27,8 +29,8 @@ const forms = reactive<Record<string, RowForm>>({})
 
 function seed() {
   for (const key of Object.keys(forms)) delete forms[key]
-  for (const item of props.day.exercises) {
-    const saved = training.logFor(props.date, item.exerciseId)
+  for (const item of day.value.exercises) {
+    const saved = training.logFor(sessionIndex.value, item.exerciseId)
     const last = training.lastLogFor(item.exerciseId)
     forms[item.uid] = {
       sets: saved?.sets ?? item.prescription.sets,
@@ -39,16 +41,19 @@ function seed() {
   }
 }
 
-watch(() => [props.day, props.date], seed, { immediate: true })
+watch(() => props.session, seed, { immediate: true })
 
 const doneCount = computed(
-  () => props.day.exercises.filter((item) => !!training.logFor(props.date, item.exerciseId)).length,
+  () =>
+    day.value.exercises.filter(
+      (item) => !!training.logFor(sessionIndex.value, item.exerciseId),
+    ).length,
 )
 
-const total = computed(() => props.day.exercises.length)
+const total = computed(() => day.value.exercises.length)
 
 function savedFor(item: PlannedExercise) {
-  return training.logFor(props.date, item.exerciseId)
+  return training.logFor(sessionIndex.value, item.exerciseId)
 }
 
 function exerciseOf(item: PlannedExercise) {
@@ -64,8 +69,8 @@ function logRow(item: PlannedExercise) {
   const form = forms[item.uid]
   if (!form) return
   training.upsertLog({
-    date: props.date,
-    sessionKey: props.day.key,
+    sessionIndex: sessionIndex.value,
+    sessionKey: day.value.key,
     exerciseId: item.exerciseId,
     sets: form.sets,
     reps: form.reps,
@@ -80,7 +85,7 @@ function removeRow(item: PlannedExercise) {
 }
 
 function logAll() {
-  for (const item of props.day.exercises) {
+  for (const item of day.value.exercises) {
     if (!savedFor(item)) logRow(item)
   }
 }
@@ -102,7 +107,7 @@ function roleLabel(role: PlannedExercise['role']): string {
   <article class="plan-card session-card">
     <header class="session-head">
       <div class="session-head-main">
-        <div class="session-kicker">{{ day.en }} · {{ formatShortDate(date) }} {{ weekdayName(date) }}</div>
+        <div class="session-kicker">{{ day.en }} · 第 {{ session.index }} 练</div>
         <h3 class="session-title">{{ day.title }}</h3>
         <p class="session-focus">{{ day.focus }}</p>
       </div>

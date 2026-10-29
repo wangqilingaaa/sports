@@ -129,7 +129,7 @@
   white-space: nowrap;
 }
 
-/* ───────────── 目标 / 水平 / 频率 ───────────── */
+/* ───────────── 目标 / 水平 / 分化 ───────────── */
 .plan-controls {
   margin-top: 14px;
   padding-bottom: 12px;
@@ -211,6 +211,15 @@
   color: var(--ink-4);
 }
 
+.split-note {
+  margin: 4px 0 0;
+  padding-left: 42px;
+  font-size: 9.5px;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+}
+
 .plan-link {
   font-size: 9.5px;
   letter-spacing: 0.06em;
@@ -222,6 +231,12 @@
 .plan-link:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.plan-link:disabled {
+  color: var(--ink-4);
+  border-color: transparent;
+  cursor: default;
 }
 
 /* ───────────── 主栅格 ───────────── */
@@ -385,8 +400,8 @@
   white-space: nowrap;
 }
 
-/* ───────────── 周 / 日切换 ───────────── */
-.week-strip {
+/* ───────────── 训练序列 ───────────── */
+.session-strip {
   display: flex;
   gap: 5px;
   overflow-x: auto;
@@ -395,13 +410,15 @@
   scrollbar-color: var(--line-2) transparent;
 }
 
-.week-chip {
+.session-chip {
   --phase: var(--ink-3);
   flex: 0 0 auto;
-  min-width: 64px;
+  min-width: 148px;
+  max-width: 172px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 3px;
   padding: 7px 9px;
   text-align: left;
   background: var(--card);
@@ -410,126 +427,118 @@
   transition: border-color 0.18s, background 0.18s;
 }
 
-.week-chip[data-phase='adaptation'] {
+.session-chip[data-phase='adaptation'] {
   --phase: #4a7b73;
 }
 
-.week-chip[data-phase='volume'] {
+.session-chip[data-phase='volume'] {
   --phase: #bf8630;
 }
 
-.week-chip[data-phase='intensity'] {
+.session-chip[data-phase='intensity'] {
   --phase: #b23a2b;
 }
 
-.week-chip[data-phase='deload'] {
+.session-chip[data-phase='deload'] {
   --phase: #8b8173;
 }
 
-.week-chip:hover {
+.session-chip:hover {
   border-color: var(--line-2);
 }
 
-.week-chip.is-active {
+.session-chip.is-next {
+  border-style: dashed;
+  border-color: var(--line-2);
+}
+
+.session-chip.is-active {
+  border-style: solid;
   border-color: var(--accent);
   background: var(--accent-soft);
 }
 
-.week-no {
+.session-chip-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.session-chip-no {
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.06em;
   color: var(--ink-3);
 }
 
-.week-chip.is-active .week-no {
+.session-chip.is-active .session-chip-no {
   color: var(--accent-deep);
 }
 
-.week-dots {
-  display: flex;
-  gap: 2px;
-}
-
-.week-dots i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--line-2);
-}
-
-.week-dots i.is-done {
-  background: var(--phase);
-}
-
-.week-tag {
-  font-family: var(--mono);
-  font-size: 8px;
-  color: var(--ink-4);
-}
-
-.day-tabs {
-  display: flex;
-  gap: 5px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-2) transparent;
-}
-
-.day-tab {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 11px;
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: transparent;
-  transition: color 0.18s, border-color 0.18s, background 0.18s;
-}
-
-.day-tab-title {
+.session-chip-state {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.day-tab-date {
-  font-size: 8.5px;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: 8px;
   letter-spacing: 0.06em;
   color: var(--ink-4);
   white-space: nowrap;
 }
 
-.day-tab:hover {
-  border-color: var(--line-2);
+.session-chip-state.is-done {
+  color: var(--phase);
 }
 
-.day-tab.is-active {
-  background: var(--accent);
-  border-color: var(--accent-deep);
-  color: #fdf8f0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+.session-chip-state.is-next {
+  color: var(--accent-deep);
 }
 
-.day-tab.is-active .day-tab-date {
-  color: rgba(253, 248, 240, 0.85);
+.session-chip.is-active .session-chip-state {
+  color: var(--accent-deep);
 }
 
-.day-tab.is-done .day-tab-check {
+.session-chip-name {
+  width: 100%;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-chip.is-active .session-chip-name {
+  color: var(--accent-deep);
+}
+
+.session-chip-muscles {
+  width: 100%;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-chip.is-active .session-chip-muscles {
+  color: var(--accent-deep);
+  opacity: 0.72;
+}
+
+.session-chip-check {
   flex: 0 0 auto;
-  color: var(--teal);
+  color: var(--phase);
 }
 
-.day-tab.is-active.is-done .day-tab-check {
-  color: rgba(253, 248, 240, 0.85);
+.session-chip.is-active .session-chip-check {
+  color: var(--accent-deep);
 }
 
-.week-note {
+.session-note {
   padding-left: 9px;
   border-left: 2px solid var(--line-2);
   font-size: 10px;
@@ -1315,7 +1324,7 @@
   color: var(--ink-4);
 }
 
-/* ───────────── 本周统计 ───────────── */
+/* ───────────── 本次统计 ───────────── */
 .stats-pct {
   font-family: var(--serif);
   font-size: 23px;
@@ -1398,6 +1407,139 @@
   height: 100%;
   background: var(--accent);
   transition: width 0.4s var(--ease);
+}
+
+/* ───────────── 容量审计 ───────────── */
+.audit-phase {
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.audit-list {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px 6px;
+}
+
+.audit-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 66px;
+  align-items: center;
+  gap: 8px;
+}
+
+.audit-name {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.audit-track {
+  position: relative;
+  height: 6px;
+  background: var(--line);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.audit-target {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--teal);
+  opacity: 0.18;
+}
+
+.audit-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--ink-4);
+  border-radius: 1px;
+  transition: width 0.3s var(--ease);
+}
+
+.audit-row[data-status='low'] .audit-fill {
+  background: var(--ink-3);
+}
+
+.audit-row[data-status='ok'] .audit-fill {
+  background: var(--teal);
+}
+
+.audit-row[data-status='high'] .audit-fill {
+  background: var(--accent);
+}
+
+.audit-val {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  text-align: right;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.audit-val small {
+  margin-left: 2px;
+  font-size: 8px;
+  color: var(--ink-4);
+}
+
+.audit-row[data-status='low'] .audit-val {
+  color: var(--ink-4);
+}
+
+.audit-row[data-status='ok'] .audit-val {
+  color: var(--teal);
+}
+
+.audit-row[data-status='high'] .audit-val {
+  color: var(--accent);
+}
+
+.audit-legend {
+  display: flex;
+  gap: 10px;
+  padding: 2px 14px 0;
+  font-size: 8px;
+  color: var(--ink-4);
+}
+
+.audit-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.audit-legend i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.audit-legend span[data-status='low'] {
+  color: var(--ink-3);
+}
+
+.audit-legend span[data-status='ok'] {
+  color: var(--teal);
+}
+
+.audit-legend span[data-status='high'] {
+  color: var(--accent);
+}
+
+.audit-note {
+  margin: 6px 0 0;
+  padding: 0 14px 13px;
+  font-size: 8.5px;
+  line-height: 1.75;
+  color: var(--ink-4);
 }
 
 /* ───────────── 肌群排行 ───────────── */
@@ -1699,6 +1841,23 @@
     flex: 0 0 100%;
   }
 
+  .split-note {
+    padding-left: 0;
+  }
+
+  .audit-list {
+    padding: 10px 12px 4px;
+  }
+
+  .audit-row {
+    grid-template-columns: 44px minmax(0, 1fr) 58px;
+    gap: 6px;
+  }
+
+  .audit-note {
+    padding: 0 12px 12px;
+  }
+
   .pchip {
     padding: 4px 8px;
   }
@@ -1729,17 +1888,17 @@
     font-size: 13px;
   }
 
-  .week-chip {
-    min-width: 58px;
+  .session-chip {
+    min-width: 126px;
     padding: 6px 8px;
   }
 
-  .day-tab {
-    padding: 6px 9px;
+  .session-chip-name {
+    font-size: 10px;
   }
 
-  .day-tab-title {
-    font-size: 10px;
+  .session-chip-muscles {
+    font-size: 8.5px;
   }
 
   .session-progress b {

@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Check, X } from '@lucide/vue'
-import { useTraining, formatShortDate, weekdayName } from '@/composables/useTraining'
+import { useTraining } from '@/composables/useTraining'
 import {
   GOALS,
   HEAT_TIERS,
   PHASES,
-  PLAN_WEEKS,
+  SPLITS,
   heatTier,
   type GoalId,
   type Level,
   type Phase,
+  type PlanDay,
+  type SplitId,
 } from '@/data/training-plan'
 import { MUSCLE_MAP } from '@/data/muscles'
 import { LEVEL_LABEL } from '@/data/equipment'
 import { EXERCISE_MAP } from '@/data/exercises'
 import PlanSession from '@/components/plan/PlanSession.vue'
+import PlanVolumeAudit from '@/components/plan/PlanVolumeAudit.vue'
 import FreeCheckin from '@/components/plan/FreeCheckin.vue'
 import MuscleHeatMap from '@/components/plan/MuscleHeatMap.vue'
 import ExerciseDrawer from '@/components/ExerciseDrawer.vue'
@@ -25,75 +28,134 @@ const router = useRouter()
 const training = useTraining()
 
 const LEVELS: Level[] = [1, 2, 3]
-const FREQUENCIES: (2 | 3 | 4 | 5 | 6)[] = [2, 3, 4, 5, 6]
 
-const phase = computed(() => training.week.value.phase)
+const phase = computed(() => training.activeSession.value.phase)
 const goal = computed(() => GOALS.find((g) => g.id === training.config.value.goal) ?? GOALS[0])
-const weekDays = computed(() => training.week.value.days)
-const activeLogs = computed(() => training.logsForDate(training.activeDate.value))
+const split = computed(() => training.activeSplit.value)
+const activeDay = computed(() => training.activeDay.value)
+const activeLogs = computed(() => training.logsForSession(training.selectedIndex.value))
+const totalSessions = computed(() => training.totalSessions.value)
 
 /** 当前打开详情的动作；空表示抽屉关闭 */
 const detailId = ref<string | null>(null)
 
 /** 详情里上一项/下一项只在该训练日内走动，不把用户带到动作库的浏览序列里 */
 const dayExerciseIds = computed(() => [
-  ...new Set(training.selectedSession.value.exercises.map((item) => item.exerciseId)),
+  ...new Set(activeDay.value.exercises.map((item) => item.exerciseId)),
 ])
 
-const dayExercises = computed(() =>
-  weekDays.value.reduce((sum, d) => sum + d.exercises.length, 0),
+const totalExercises = computed(() => activeDay.value.exercises.length)
+const doneExercises = computed(
+  () =>
+    activeDay.value.exercises.filter(
+      (item) => !!training.logFor(training.selectedIndex.value, item.exerciseId),
+    ).length,
 )
-
 const completionPct = computed(() =>
-  Math.min(
-    100,
-    Math.round((training.weekStats.value.completed / Math.max(1, training.weekStats.value.planned)) * 100),
-  ),
+  Math.min(100, Math.round((doneExercises.value / Math.max(1, totalExercises.value)) * 100)),
 )
 
 const topMuscles = computed(() => training.heatDetail.value.slice(0, 6))
 
+function phaseStart(p: Phase): number {
+  return (p.rounds[0] - 1) * split.value.days + 1
+}
+
+function phaseEnd(p: Phase): number {
+  return p.rounds[1] * split.value.days
+}
+
 function phaseState(p: Phase): 'done' | 'current' | 'upcoming' {
-  if (training.selectedWeek.value > p.weeks[1]) return 'done'
-  if (training.selectedWeek.value >= p.weeks[0]) return 'current'
+  const idx = training.selectedIndex.value
+  if (idx > phaseEnd(p)) return 'done'
+  if (idx >= phaseStart(p)) return 'current'
   return 'upcoming'
+}
+
+function phaseProgress(p: Phase): string {
+  const start = phaseStart(p)
+  const end = phaseEnd(p)
+  const idx = training.selectedIndex.value
+  if (idx > end) return '100%'
+  if (idx < start) return '0%'
+  return `${((idx - start + 1) / (end - start + 1)) * 100}%`
 }
 
 function setGoal(id: GoalId) {
   if (training.config.value.goal === id) return
   training.setConfig({ goal: id })
-  training.selectedDay.value = 0
 }
 
 function setLevel(level: Level) {
   training.setConfig({ level })
-  training.selectedDay.value = 0
 }
 
-function setDays(days: 2 | 3 | 4 | 5 | 6) {
-  training.setConfig({ days })
-  training.selectedDay.value = 0
+function setSplit(id: SplitId) {
+  if (training.config.value.split === id) return
+  training.setConfig({ split: id })
+  training.syncNext()
 }
 
-function selectWeek(w: number) {
-  training.selectedWeek.value = w
-  training.selectedDay.value = 0
+function selectPhase(p: Phase) {
+  training.selectedIndex.value = phaseStart(p)
 }
 
-function selectDay(i: number) {
-  training.selectedDay.value = i
+function selectSession(index: number) {
+  training.selectedIndex.value = index
 }
 
-function restart() {
-  if (!window.confirm('把计划起点对齐到本周一？已打卡的记录会保留。')) return
-  training.restart()
+/** 训练序列里用的肌群简称，让卡片一行装得下 */
+const MUSCLE_SHORT: Record<string, string> = {
+  胸大肌: '胸',
+  胸大肌锁骨部: '上胸',
+  三角肌: '肩',
+  三角肌前束: '肩前',
+  三角肌中束: '肩中',
+  三角肌后束: '后束',
+  肱三头肌: '三头',
+  肱二头肌: '二头',
+  背阔肌: '背',
+  斜方肌: '斜方',
+  菱形肌: '菱形',
+  股四头肌: '股四头',
+  臀大肌: '臀',
+  腘绳肌: '腘绳',
+  内收肌: '内收',
+  背部: '背',
+  肩部: '肩',
+}
+
+function shortMuscle(name: string): string {
+  return MUSCLE_SHORT[name] ?? name.replace(/肌$/, '')
+}
+
+function dayFocus(day: PlanDay): string {
+  return day.focus
+    .split(' · ')
+    .slice(0, 3)
+    .map(shortMuscle)
+    .join(' · ')
+}
+
+const stripRef = ref<HTMLElement | null>(null)
+
+function scrollActiveIntoView() {
+  const el = stripRef.value?.querySelector<HTMLElement>('.session-chip.is-active')
+  el?.scrollIntoView({ block: 'nearest', inline: 'center' })
+}
+
+watch(() => training.selectedIndex.value, () => void nextTick(scrollActiveIntoView))
+
+function goNext() {
+  training.syncNext()
+  void nextTick(scrollActiveIntoView)
 }
 
 function exerciseName(id: string): string {
   return EXERCISE_MAP.get(id)?.zh ?? id
 }
 
-function heatRangeButton(range: 'week' | 'month' | 'all') {
+function heatRangeButton(range: 'session' | 'recent' | 'all') {
   training.heatRange.value = range
 }
 
@@ -134,7 +196,8 @@ function onKey(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-  training.syncToday()
+  training.syncNext()
+  void nextTick(scrollActiveIntoView)
   window.addEventListener('keydown', onKey)
 })
 
@@ -151,13 +214,13 @@ onBeforeUnmount(() => {
         <div class="plan-head-side">
           <button class="plan-back" @click="backToAtlas"><ArrowLeft :size="12" />返回动作库</button>
           <div class="plan-now">
-            <b>第 {{ training.selectedWeek.value }} 周</b>
-            <span>{{ phase.name }} · {{ phase.rpe }}</span>
+            <b>第 {{ training.selectedIndex.value }} 练</b>
+            <span>{{ phase.name }} · {{ split.zh }} · {{ phase.rpe }} · 共 {{ totalSessions }} 练</span>
           </div>
         </div>
       </header>
 
-      <!-- ─── 目标 / 水平 / 频率 ─── -->
+      <!-- ─── 目标 / 水平 / 分化 ─── -->
       <div class="plan-controls">
         <div class="control-row">
           <span class="control-key">目标</span>
@@ -188,23 +251,28 @@ onBeforeUnmount(() => {
               <b>{{ LEVEL_LABEL[level] }}</b>
             </button>
           </div>
-          <span class="control-key is-second">频率</span>
+          <span class="control-key is-second">分化</span>
           <div class="control-chips">
             <button
-              v-for="d in FREQUENCIES"
-              :key="d"
+              v-for="s in SPLITS"
+              :key="s.id"
               class="pchip is-compact"
-              :class="{ 'is-active': training.config.value.days === d }"
-              @click="setDays(d)"
+              :class="{ 'is-active': training.config.value.split === s.id }"
+              :title="`${s.desc} 适合${s.levelHint}。`"
+              @click="setSplit(s.id)"
             >
-              <b>{{ d }} 天</b>
+              <b>{{ s.zh }}</b>
+              <em>{{ s.days }} 练</em>
             </button>
           </div>
           <span class="control-summary">
-            {{ training.config.value.days }} 练/周 · 每周 {{ dayExercises }} 个动作位 · 共 {{ PLAN_WEEKS }} 周
+            {{ split.zh }} · {{ split.days }} 练/循环 · 共 {{ totalSessions }} 练
           </span>
-          <button class="plan-link" @click="restart">对齐到本周一</button>
+          <button class="plan-link" :disabled="training.allDone.value" @click="goNext">
+            {{ training.allDone.value ? '全部训练已完成' : '跳到下一次训练' }}
+          </button>
         </div>
+        <p class="split-note">{{ split.desc }} 适合{{ split.levelHint }}。</p>
       </div>
 
       <div class="plan-grid">
@@ -218,22 +286,16 @@ onBeforeUnmount(() => {
               class="phase-card"
               :class="`is-${phaseState(p)}`"
               :data-phase="p.id"
-              @click="selectWeek(p.weeks[0])"
+              @click="selectPhase(p)"
             >
               <span class="phase-index">0{{ i + 1 }}</span>
               <span class="phase-name">{{ p.name }}</span>
-              <span class="phase-weeks">第 {{ p.weeks[0] }}–{{ p.weeks[1] }} 周 · {{ p.volume }}</span>
+              <span class="phase-weeks">
+                第 {{ phaseStart(p) }}–{{ phaseEnd(p) }} 练 ·
+                {{ p.rounds[1] - p.rounds[0] + 1 }} 轮 · {{ p.volume }}
+              </span>
               <span class="phase-bar">
-                <i
-                  :style="{
-                    width:
-                      phaseState(p) === 'done'
-                        ? '100%'
-                        : phaseState(p) === 'current'
-                          ? `${((training.selectedWeek.value - p.weeks[0] + 1) / (p.weeks[1] - p.weeks[0] + 1)) * 100}%`
-                          : '0%',
-                  }"
-                ></i>
+                <i :style="{ width: phaseProgress(p) }"></i>
               </span>
             </button>
           </div>
@@ -245,81 +307,74 @@ onBeforeUnmount(() => {
             <span class="phase-banner-meta">{{ phase.volume }} · {{ phase.rpe }}</span>
           </div>
 
-          <!-- 周选择 -->
-          <div class="week-strip" aria-label="选择训练周">
+          <!-- 训练序列：按完成次数推进，不绑定日期 -->
+          <div ref="stripRef" class="session-strip" aria-label="选择训练">
             <button
-              v-for="w in training.plan.value"
-              :key="w.week"
-              class="week-chip"
-              :class="{ 'is-active': training.selectedWeek.value === w.week }"
-              :data-phase="w.phase.id"
-              @click="selectWeek(w.week)"
-            >
-              <span class="week-no">W{{ w.week }}</span>
-              <span class="week-dots">
-                <i
-                  v-for="(d, di) in w.days"
-                  :key="d.key"
-                  :class="{ 'is-done': training.dayDone(w.week, di) }"
-                ></i>
-              </span>
-              <span class="week-tag">{{ training.completedInWeek(w.week) }}/{{ w.days.length }}</span>
-            </button>
-          </div>
-
-          <!-- 训练日切换 -->
-          <div class="day-tabs" aria-label="选择训练日">
-            <button
-              v-for="(d, i) in weekDays"
-              :key="d.key"
-              class="day-tab"
+              v-for="s in training.plan.value"
+              :key="s.index"
+              class="session-chip"
               :class="{
-                'is-active': training.selectedDay.value === i,
-                'is-done': training.dayDone(training.selectedWeek.value, i),
+                'is-active': training.selectedIndex.value === s.index,
+                'is-done': training.sessionDone(s.index),
+                'is-next': !training.sessionDone(s.index) && s.index === training.nextIndex.value,
               }"
-              @click="selectDay(i)"
+              :data-phase="s.phase.id"
+              :title="`第 ${s.index} 练 · ${s.day.title} · ${s.day.focus}`"
+              @click="selectSession(s.index)"
             >
-              <span class="day-tab-title">
-                <Check
-                  v-if="training.dayDone(training.selectedWeek.value, i)"
-                  class="day-tab-check"
-                  :size="10"
-                  :stroke-width="2.6"
-                />
-                <span>{{ d.title }}</span>
+              <span class="session-chip-top">
+                <span class="session-chip-no">{{ String(s.index).padStart(2, '0') }}</span>
+                <span
+                  class="session-chip-state"
+                  :class="{
+                    'is-done': training.sessionDone(s.index),
+                    'is-next': !training.sessionDone(s.index) && s.index === training.nextIndex.value,
+                  }"
+                >
+                  <Check
+                    v-if="training.sessionDone(s.index)"
+                    class="session-chip-check"
+                    :size="9"
+                    :stroke-width="2.6"
+                  />
+                  {{
+                    training.sessionDone(s.index)
+                      ? '已练'
+                      : s.index === training.nextIndex.value
+                        ? '下次'
+                        : '待练'
+                  }}
+                </span>
               </span>
-              <span class="day-tab-date">
-                {{ formatShortDate(training.dateFor(training.selectedWeek.value, i)) }}
-                {{ weekdayName(training.dateFor(training.selectedWeek.value, i)) }}
-              </span>
+              <span class="session-chip-name">{{ s.day.title }}</span>
+              <span class="session-chip-muscles">{{ dayFocus(s.day) }}</span>
             </button>
           </div>
 
-          <div class="week-note">{{ training.week.value.note }}</div>
+          <div class="session-note">{{ training.activeSession.value.note }}</div>
 
-          <!-- 当日训练与打卡 -->
+          <!-- 当前训练与打卡 -->
           <PlanSession
-            :day="training.selectedSession.value"
-            :date="training.activeDate.value"
+            :session="training.activeSession.value"
             @open-exercise="openExercise"
           />
 
-          <!-- 当日记录 -->
+          <!-- 本次记录 -->
           <section class="plan-card log-card">
             <header class="plan-card-head">
               <div>
-                <div class="plan-kicker">Log · 当日记录</div>
+                <div class="plan-kicker">Log · 本次记录</div>
                 <h3 class="plan-card-title">
-                  {{ formatShortDate(training.activeDate.value) }} 已打卡 {{ activeLogs.length }} 条
+                  第 {{ training.selectedIndex.value }} 练已打卡 {{ activeLogs.length }} 条
                 </h3>
               </div>
               <span class="log-total">
-                {{ training.logsForDate(training.activeDate.value).reduce((s, l) => s + l.sets, 0) }} 组
+                {{ activeLogs.reduce((s, l) => s + l.sets, 0) }} 组
               </span>
             </header>
 
             <div v-if="!activeLogs.length" class="log-empty">
-              这一天还没有记录。按计划动作打卡，或用下面的「自由打卡」补上临时增加的动作。
+              这一次训练还没有记录。按计划动作打卡，或用下面的「自由打卡」补上临时增加的动作。
             </div>
             <div v-else class="log-list">
               <div v-for="l in activeLogs" :key="l.id" class="log-item">
@@ -340,7 +395,7 @@ onBeforeUnmount(() => {
           </section>
 
           <!-- 自由打卡 -->
-          <FreeCheckin :date="training.activeDate.value" />
+          <FreeCheckin :session-index="training.selectedIndex.value" />
         </main>
 
         <!-- ─── 侧列 ─── -->
@@ -350,20 +405,20 @@ onBeforeUnmount(() => {
             <header class="plan-card-head">
               <div>
                 <div class="plan-kicker">Heat map · 3D 肌肉热图</div>
-                <h3 class="plan-card-title">本周练到了哪里</h3>
+                <h3 class="plan-card-title">练到了哪里</h3>
               </div>
               <div class="heat-range">
                 <button
-                  :class="{ 'is-active': training.heatRange.value === 'week' }"
-                  @click="heatRangeButton('week')"
+                  :class="{ 'is-active': training.heatRange.value === 'session' }"
+                  @click="heatRangeButton('session')"
                 >
-                  本周
+                  本次
                 </button>
                 <button
-                  :class="{ 'is-active': training.heatRange.value === 'month' }"
-                  @click="heatRangeButton('month')"
+                  :class="{ 'is-active': training.heatRange.value === 'recent' }"
+                  @click="heatRangeButton('recent')"
                 >
-                  近 4 周
+                  近 8 练
                 </button>
                 <button
                   :class="{ 'is-active': training.heatRange.value === 'all' }"
@@ -377,49 +432,47 @@ onBeforeUnmount(() => {
             <MuscleHeatMap :scores="training.heatScores.value" />
 
             <div class="heat-meta">
-              <span>
-                范围：{{ training.heatRange.value === 'week' ? `第 ${training.selectedWeek.value} 周` : training.heatRange.value === 'month' ? '近 28 天' : '全部记录' }}
-              </span>
+              <span>范围：{{ training.heatScopeLabel.value }}</span>
               <span>有效组 · 悬停查看肌群</span>
             </div>
             <p class="heat-note">
-              有效组 = 组数 × 该动作对该肌群的激活占比 × RPE 系数。颜色越深，说明这一周该肌群承受的有效刺激越多；
+              有效组 = 组数 × 该动作对该肌群的激活占比 × RPE 系数。颜色越深，说明所选范围内该肌群承受的有效刺激越多；
               未着色的肌群表示还没有被记录到。
             </p>
           </section>
 
-          <!-- 本周统计 -->
+          <!-- 本次统计 -->
           <section class="plan-card stats-card">
             <header class="plan-card-head">
               <div>
-                <div class="plan-kicker">Week {{ training.selectedWeek.value }} · 统计</div>
-                <h3 class="plan-card-title">本周训练负荷</h3>
+                <div class="plan-kicker">Session {{ training.selectedIndex.value }} · 统计</div>
+                <h3 class="plan-card-title">本次训练负荷</h3>
               </div>
               <span class="stats-pct">{{ completionPct }}%</span>
             </header>
 
             <div class="stats-grid">
               <div class="stat-cell">
-                <b>{{ training.weekStats.value.completed }}<small>/{{ training.weekStats.value.planned }}</small></b>
-                <span>完成训练日</span>
+                <b>{{ doneExercises }}<small>/{{ totalExercises }}</small></b>
+                <span>动作位完成</span>
               </div>
               <div class="stat-cell">
-                <b>{{ training.streak.value }}<small>天</small></b>
-                <span>连续打卡</span>
+                <b>{{ training.streak.value }}<small>次</small></b>
+                <span>连续完成训练</span>
               </div>
               <div class="stat-cell">
-                <b>{{ training.weekStats.value.sets }}<small>组</small></b>
-                <span>总组数</span>
+                <b>{{ training.sessionStats.value.sets }}<small>组</small></b>
+                <span>本次总组数</span>
               </div>
               <div class="stat-cell">
-                <b>{{ training.weekStats.value.minutes }}<small>min</small></b>
+                <b>{{ training.sessionStats.value.minutes }}<small>min</small></b>
                 <span>估算训练时长</span>
               </div>
             </div>
 
             <div class="stats-volume">
-              <span>外部负荷容量</span>
-              <b>{{ volumeLabel(training.weekStats.value.volume) }}</b>
+              <span>本次外部负荷容量</span>
+              <b>{{ volumeLabel(training.sessionStats.value.volume) }}</b>
               <em>自重动作不计入 kg 容量</em>
             </div>
 
@@ -427,6 +480,14 @@ onBeforeUnmount(() => {
               <i :style="{ width: `${completionPct}%` }"></i>
             </div>
           </section>
+
+          <!-- 本轮计划容量 -->
+          <PlanVolumeAudit
+            :items="training.volumeAudit.value"
+            :round="training.activeSession.value.round"
+            :phase-name="phase.name"
+            :goal-zh="goal.zh"
+          />
 
           <!-- 肌群强度排行 -->
           <section class="plan-card rank-card">
@@ -439,7 +500,7 @@ onBeforeUnmount(() => {
             </header>
 
             <div v-if="!topMuscles.length" class="rank-empty">
-              打卡后这里会按有效组排序，告诉你本周刺激主要集中在哪些肌群。
+              打卡后这里会按有效组排序，告诉你训练刺激主要集中在哪些肌群。
             </div>
             <div v-else class="rank-list">
               <div v-for="m in topMuscles" :key="m.id" class="rank-row">
@@ -469,7 +530,7 @@ onBeforeUnmount(() => {
             <div class="plan-kicker">Next · 下一次怎么练</div>
             <p class="advice-text">{{ training.recommendation.value }}</p>
             <div class="advice-meta">
-              <span>本周「{{ goal.zh }}」处方</span>
+              <span>「{{ goal.zh }}」处方</span>
               <span>{{ goal.badge }}</span>
             </div>
             <p class="advice-sub">{{ goal.desc }}</p>
@@ -481,15 +542,15 @@ onBeforeUnmount(() => {
         <div class="plan-principles">
           <div>
             <b>渐进超负荷</b>
-            <span>完成度 ≥80% 才加负荷，否则重复上周；加负荷优先加重量，其次加次数，最后加组数。</span>
+            <span>完成度 ≥80% 才加负荷，否则重复上一次；加负荷优先加重量，其次加次数，最后加组数。</span>
           </div>
           <div>
             <b>容量—强度波动</b>
-            <span>三周累积、一周减载。减载不是偷懒，而是让超量恢复真正发生。</span>
+            <span>三段累积、一段减载。减载不是偷懒，而是让超量恢复真正发生。</span>
           </div>
           <div>
-            <b>有效组优先</b>
-            <span>热身组不计入有效组；每个肌群每周 10–20 个有效组是多数人的增肌区间。</span>
+            <b>容量优先</b>
+            <span>直接组按主动肌 1 组、协同肌 0.5 组计；低于区间先加主项，高于区间先减孤立。</span>
           </div>
           <div>
             <b>记录而非感觉</b>
