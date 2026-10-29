@@ -510,13 +510,14 @@
 }
 
 .day-tab.is-active {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--card);
+  background: var(--accent);
+  border-color: var(--accent-deep);
+  color: #fdf8f0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .day-tab.is-active .day-tab-date {
-  color: rgba(253, 251, 246, 0.62);
+  color: rgba(253, 248, 240, 0.85);
 }
 
 .day-tab.is-done .day-tab-check {
@@ -525,7 +526,7 @@
 }
 
 .day-tab.is-active.is-done .day-tab-check {
-  color: #9ec7bd;
+  color: rgba(253, 248, 240, 0.85);
 }
 
 .week-note {
@@ -1179,8 +1180,8 @@
 }
 
 .heat-range button.is-active {
-  background: var(--ink);
-  color: var(--card);
+  background: var(--accent);
+  color: #fdf8f0;
 }
 
 .heat-stage {
