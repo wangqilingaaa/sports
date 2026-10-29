@@ -1560,52 +1560,88 @@ a {
   letter-spacing: 0.08em;
 }
 
+/* 翻页：20 个动作一页，页码用 mono 数字，和卡片序号同一套排版 */
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0 2px;
+}
+
+.pager-range {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pager-range b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.pager-track {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: rgba(253, 251, 246, 0.6);
+}
+
+.pager-step,
+.pager-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 1px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  transition: background 0.16s, color 0.16s;
+}
+
+.pager-step:hover:not(:disabled),
+.pager-num:hover {
+  color: var(--ink);
+  background: rgba(27, 23, 19, 0.05);
+}
+
+.pager-step:disabled {
+  color: var(--ink-4);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pager-num.is-active {
+  background: var(--ink);
+  color: var(--card);
+}
+
 /* ───────────── 页脚 ───────────── */
 .colophon {
   border-top: 1px solid var(--line-2);
-  padding: clamp(28px, 4vh, 44px) var(--gutter) clamp(30px, 4vh, 48px);
+  padding: clamp(16px, 2.2vh, 22px) var(--gutter);
   background: linear-gradient(180deg, rgba(234, 227, 214, 0.5), rgba(234, 227, 214, 0.9));
 }
 
+/* 版权条只剩技术栈标签：右对齐到内容栏右缘，与正文同一列宽 */
 .colophon-inner {
   max-width: var(--max);
   margin: 0 auto;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 24px;
-}
-
-.colophon-title {
-  font-family: var(--serif);
-  font-size: 15px;
-  letter-spacing: 0.16em;
-  margin: 0 0 6px;
-  color: var(--ink);
-}
-
-.colophon-text {
-  margin: 0;
-  max-width: 60ch;
-  font-size: 10.5px;
-  line-height: 1.9;
-  color: var(--ink-3);
-}
-
-.colophon-text a {
-  color: var(--ink-2);
-  text-decoration: none;
-  border-bottom: 1px dotted var(--line-2);
-}
-
-.colophon-text a:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.colophon-tags {
-  margin-left: auto;
-  display: flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 14px;
   font-family: var(--mono);
   font-size: 9px;
@@ -2448,11 +2484,6 @@ a {
   .demo-pattern {
     font-size: 14px;
   }
-
-  .colophon-tags {
-    margin-left: 0;
-    width: 100%;
-  }
 }
 
 @media (max-width: 560px) {
@@ -2511,6 +2542,11 @@ a {
 
   .ex-card {
     min-height: 0;
+  }
+
+  .pager {
+    flex-wrap: wrap;
+    row-gap: 10px;
   }
 
   .demo-body {
