@@ -148,16 +148,6 @@ onBeforeUnmount(() => {
     <div class="plan-wrap">
       <!-- ─── 页头 ─── -->
       <header class="plan-head">
-        <div class="plan-head-main">
-          <div class="plan-kicker">Program · 周期化训练</div>
-          <h1 class="plan-title">
-            八周<span class="plan-title-accent">{{ goal.zh }}</span>计划
-          </h1>
-          <p class="plan-lead">
-            按「解剖适应 → 容量累积 → 强度强化 → 减载恢复」四段推进。主项组数、次数与 RPE 由分期自动推导，
-            每次打卡都会进入模型热图与周容量统计，下一次加负荷只取决于你真实的完成度。
-          </p>
-        </div>
         <div class="plan-head-side">
           <button class="plan-back" @click="backToAtlas"><ArrowLeft :size="12" />返回动作库</button>
           <div class="plan-now">

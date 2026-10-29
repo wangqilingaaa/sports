@@ -15,8 +15,7 @@
   transition: color 0.18s, border-color 0.18s, background 0.18s;
 }
 
-.plan-switch:hover,
-.plan-switch.is-on {
+.plan-switch:hover {
   color: var(--accent-deep);
   border-color: rgba(178, 58, 43, 0.4);
   background: var(--accent-soft);
@@ -54,11 +53,9 @@
 }
 
 .plan-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 28px;
-  padding-bottom: 20px;
+  display: flex;
+  align-items: center;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line-2);
 }
 
@@ -86,10 +83,10 @@
 
 .plan-head-side {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding-bottom: 4px;
 }
 
 .plan-back {
@@ -110,24 +107,26 @@
 }
 
 .plan-now {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   text-align: right;
 }
 
 .plan-now b {
-  display: block;
   font-family: var(--serif);
-  font-size: 25px;
+  font-size: 15px;
   line-height: 1;
   letter-spacing: 0.04em;
   color: var(--ink);
+  white-space: nowrap;
 }
 
 .plan-now span {
-  display: block;
-  margin-top: 5px;
   font-size: 9.5px;
   letter-spacing: 0.1em;
   color: var(--ink-3);
+  white-space: nowrap;
 }
 
 /* ───────────── 目标 / 水平 / 频率 ───────────── */
@@ -246,13 +245,13 @@
 .phase-rail {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
 }
 
 .phase-card {
   --phase: var(--ink-3);
   position: relative;
-  padding: 10px 11px 12px;
+  padding: 7px 9px 8px;
   text-align: left;
   background: var(--card);
   border: 1px solid var(--line);
@@ -297,18 +296,23 @@
 }
 
 .phase-index {
+  position: absolute;
+  top: 8px;
+  right: 9px;
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: 8px;
+  line-height: 1;
   letter-spacing: 0.08em;
   color: var(--ink-4);
 }
 
 .phase-name {
   display: block;
-  margin-top: 4px;
+  padding-right: 18px;
   font-family: var(--serif);
-  font-size: 14.5px;
-  letter-spacing: 0.05em;
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
   color: var(--ink);
 }
 
@@ -318,16 +322,17 @@
 
 .phase-weeks {
   display: block;
-  margin-top: 3px;
-  font-size: 8.5px;
-  letter-spacing: 0.04em;
+  margin-top: 2px;
+  font-size: 8px;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
   color: var(--ink-4);
 }
 
 .phase-bar {
   display: block;
   height: 2px;
-  margin-top: 9px;
+  margin-top: 6px;
   background: var(--line);
   overflow: hidden;
 }
@@ -1569,20 +1574,11 @@
   }
 
   .plan-head {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
+    padding-bottom: 8px;
   }
 
   .plan-head-side {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding-bottom: 0;
-  }
-
-  .plan-now {
-    text-align: right;
+    gap: 8px;
   }
 
   .plan-title {

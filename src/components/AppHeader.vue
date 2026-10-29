@@ -58,7 +58,6 @@ onBeforeUnmount(() => {
       <span class="topbar-stat"><b>{{ atlas.totalEquipment }}</b>器械</span>
       <RouterLink
         class="plan-switch"
-        :class="{ 'is-on': isPlan }"
         :to="isPlan ? { name: 'atlas', hash: '#model' } : { name: 'plan' }"
       >
         <ChartColumn :size="13" :stroke-width="2" />
