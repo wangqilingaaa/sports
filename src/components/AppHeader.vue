@@ -40,15 +40,15 @@ onBeforeUnmount(() => {
 <template>
   <header class="topbar" :class="{ 'is-scrolled': scrolled }">
     <RouterLink class="brand" :to="{ name: 'atlas', hash: '#model' }" @click="goSection('model', $event)">
-      <span class="brand-mark">解</span>
+      <span class="brand-mark">形</span>
       <span>
-        <span class="brand-name">解剖图谱</span>
+        <span class="brand-name">形骸</span>
         <span class="brand-sub">Atlas of Strength</span>
       </span>
     </RouterLink>
 
     <nav class="topnav">
-      <RouterLink :to="{ name: 'atlas', hash: '#model' }" @click="goSection('model', $event)">解剖模型</RouterLink>
+      <RouterLink :to="{ name: 'atlas', hash: '#model' }" @click="goSection('model', $event)">肌骨模型</RouterLink>
       <RouterLink :to="{ name: 'atlas', hash: '#library' }" @click="goSection('library', $event)">动作库</RouterLink>
     </nav>
 

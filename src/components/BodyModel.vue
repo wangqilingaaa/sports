@@ -573,7 +573,7 @@ onBeforeUnmount(() => {
   <div class="hero-stage" :class="{ 'is-docked': !!atlas.muscleFilter.value }">
     <div ref="host" class="hero-canvas">
       <div v-if="loading" class="stage-loading">
-        <div class="loading-label">载入三维解剖模型</div>
+        <div class="loading-label">载入三维肌骨模型</div>
         <div class="loading-track"><i :style="{ width: progress + '%' }"></i></div>
         <div class="loading-num">{{ failed ? '加载失败，请检查模型文件' : progress + '%' }}</div>
       </div>
