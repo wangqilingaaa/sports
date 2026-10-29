@@ -1,9 +1,12 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import router from './router'
 import './styles/main.css'
 import './styles/plan.css'
 
 const app = createApp(App)
+
+app.use(router)
 
 /** 元素进入视口时轻微上浮淡入（尊重 prefers-reduced-motion） */
 app.directive('reveal', {

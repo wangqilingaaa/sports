@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ArrowLeft, Check, X } from '@lucide/vue'
 import { useTraining, formatShortDate, weekdayName } from '@/composables/useTraining'
 import {
@@ -19,11 +20,7 @@ import PlanSession from '@/components/plan/PlanSession.vue'
 import FreeCheckin from '@/components/plan/FreeCheckin.vue'
 import MuscleHeatMap from '@/components/plan/MuscleHeatMap.vue'
 
-const emit = defineEmits<{
-  (e: 'back'): void
-  (e: 'open-exercise', id: string): void
-}>()
-
+const router = useRouter()
 const training = useTraining()
 
 const LEVELS: Level[] = [1, 2, 3]
@@ -100,8 +97,27 @@ function volumeLabel(volume: number): string {
   return volume >= 1000 ? `${(volume / 1000).toFixed(1)} t` : `${Math.round(volume)} kg`
 }
 
+/** 返回动作库顶部 */
+function backToAtlas() {
+  void router.push({ name: 'atlas', hash: '#model' })
+}
+
+/** 从计划里的动作跳到解剖模型详情 */
+function openExercise(id: string) {
+  void router.push({ name: 'atlas', query: { ex: id } })
+}
+
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') backToAtlas()
+}
+
 onMounted(() => {
   training.syncToday()
+  window.addEventListener('keydown', onKey)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
 })
 </script>
 
@@ -121,7 +137,7 @@ onMounted(() => {
           </p>
         </div>
         <div class="plan-head-side">
-          <button class="plan-back" @click="emit('back')"><ArrowLeft :size="12" />返回动作库</button>
+          <button class="plan-back" @click="backToAtlas"><ArrowLeft :size="12" />返回动作库</button>
           <div class="plan-now">
             <b>第 {{ training.selectedWeek.value }} 周</b>
             <span>{{ phase.name }} · {{ phase.rpe }}</span>
@@ -275,7 +291,7 @@ onMounted(() => {
           <PlanSession
             :day="training.selectedSession.value"
             :date="training.activeDate.value"
-            @open-exercise="emit('open-exercise', $event)"
+            @open-exercise="openExercise"
           />
 
           <!-- 当日记录 -->
