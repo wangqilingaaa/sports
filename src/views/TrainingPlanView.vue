@@ -238,12 +238,10 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <!-- 当前分期提示 -->
+          <!-- 当前分期提示：一行说完分期、意图与容量/RPE，超长截断 -->
           <div class="phase-banner" :data-phase="phase.id">
-            <div class="phase-banner-main">
-              <span class="phase-banner-kicker">{{ phase.en }}</span>
-              <p class="phase-banner-text">{{ phase.intent }}</p>
-            </div>
+            <span class="phase-banner-kicker">{{ phase.en }}</span>
+            <p class="phase-banner-text" :title="phase.intent">{{ phase.intent }}</p>
             <span class="phase-banner-meta">{{ phase.volume }} · {{ phase.rpe }}</span>
           </div>
 
