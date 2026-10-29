@@ -1,28 +1,41 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useAtlas } from '@/composables/useAtlas'
 import { EQUIPMENT_MAP, LEVEL_LABEL, PATTERN_LABEL } from '@/data/equipment'
+import { EXERCISE_MAP } from '@/data/exercises'
 import { MUSCLE_MAP, ROLE_LABEL } from '@/data/muscles'
+import type { Exercise, MuscleId } from '@/data/types'
 import MovementDemo from './MovementDemo.vue'
 
-const atlas = useAtlas()
+const props = defineProps<{
+  exerciseId: string
+  /** 同一列表内的浏览序列，决定序号与上一项/下一项的边界；缺省时只含当前动作 */
+  scopeIds?: string[]
+  /** 动作库语境下点肌群直接筛选；计划页的详情只读 */
+  muscleFilterable?: boolean
+}>()
 
-const ex = computed(() => atlas.activeExercise.value)
+const emit = defineEmits<{
+  (e: 'select', id: string): void
+  (e: 'filter-muscle', id: MuscleId): void
+}>()
 
-const sortedMuscles = computed(() => {
-  if (!ex.value) return []
-  return [...ex.value.muscles].sort((a, b) => b.activation - a.activation)
+const ex = computed(() => EXERCISE_MAP.get(props.exerciseId) ?? null)
+
+/** 当前动作所在的浏览序列：去重并剔除不存在的 id */
+const scope = computed<Exercise[]>(() => {
+  const ids = props.scopeIds?.length ? props.scopeIds : [props.exerciseId]
+  const list = [...new Set(ids)]
+    .map((id) => EXERCISE_MAP.get(id))
+    .filter((item): item is Exercise => !!item)
+  return list.length ? list : ex.value ? [ex.value] : []
 })
 
-const equip = computed(() => (ex.value ? EQUIPMENT_MAP.get(ex.value.equipment) : null))
+const index = computed(() => scope.value.findIndex((item) => item.id === props.exerciseId))
+const position = computed(() => Math.max(0, index.value))
 
-const index = computed(() => atlas.results.value.findIndex((e) => e.id === ex.value?.id))
-
-const prev = computed(() => (index.value > 0 ? atlas.results.value[index.value - 1] : null))
+const prev = computed(() => (index.value > 0 ? scope.value[index.value - 1] : null))
 const next = computed(() =>
-  index.value >= 0 && index.value < atlas.results.value.length - 1
-    ? atlas.results.value[index.value + 1]
-    : null,
+  index.value >= 0 && index.value < scope.value.length - 1 ? scope.value[index.value + 1] : null,
 )
 
 const tempoText = computed(() => {
@@ -32,15 +45,26 @@ const tempoText = computed(() => {
   return `向心 ${c}s · 离心 ${e}s`
 })
 
-function filterByMuscle(id: (typeof sortedMuscles.value)[number]['id']) {
-  atlas.toggleMuscle(id)
+const sortedMuscles = computed(() => {
+  if (!ex.value) return []
+  return [...ex.value.muscles].sort((a, b) => b.activation - a.activation)
+})
+
+const equip = computed(() => (ex.value ? EQUIPMENT_MAP.get(ex.value.equipment) : null))
+
+function pick(id: string) {
+  emit('select', id)
+}
+
+function filterByMuscle(id: MuscleId) {
+  if (props.muscleFilterable) emit('filter-muscle', id)
 }
 </script>
 
 <template>
   <div v-if="ex" class="detail">
     <div class="d-top">
-      <span class="d-kicker">{{ String(index + 1).padStart(2, '0') }} / {{ atlas.results.value.length }}</span>
+      <span class="d-kicker">{{ String(position + 1).padStart(2, '0') }} / {{ scope.length }}</span>
       <span class="d-kicker">{{ equip?.en }}</span>
     </div>
 
@@ -55,14 +79,16 @@ function filterByMuscle(id: (typeof sortedMuscles.value)[number]['id']) {
       <span v-if="ex.unilateral" class="badge accent">单侧</span>
     </div>
 
-    <MovementDemo />
+    <MovementDemo :exercise-id="exerciseId" />
 
     <div class="d-section">
       <div class="d-label">肌肉激活 <span>Activation</span></div>
-      <button
+      <component
+        :is="muscleFilterable ? 'button' : 'div'"
         v-for="h in sortedMuscles"
         :key="h.id"
         class="act-row"
+        :class="{ 'is-static': !muscleFilterable }"
         :title="MUSCLE_MAP.get(h.id)?.action"
         @click="filterByMuscle(h.id)"
       >
@@ -74,7 +100,7 @@ function filterByMuscle(id: (typeof sortedMuscles.value)[number]['id']) {
           <span class="act-fill" :class="h.role" :style="{ width: h.activation + '%' }"></span>
         </span>
         <span class="act-val">{{ h.activation }}%</span>
-      </button>
+      </component>
       <div class="d-joint"><b>关节动作：</b>{{ ex.jointAction }}</div>
     </div>
 
@@ -101,10 +127,10 @@ function filterByMuscle(id: (typeof sortedMuscles.value)[number]['id']) {
     <div class="note-box"><b>收缩特征 ·</b> {{ ex.contractionNote }}</div>
 
     <div class="d-nav">
-      <button :disabled="!prev" @click="prev && atlas.selectExercise(prev.id)">
+      <button :disabled="!prev" @click="prev && pick(prev.id)">
         ← {{ prev ? prev.zh : '已是第一个' }}
       </button>
-      <button :disabled="!next" @click="next && atlas.selectExercise(next.id)">
+      <button :disabled="!next" @click="next && pick(next.id)">
         {{ next ? next.zh : '已是最后一个' }} →
       </button>
     </div>

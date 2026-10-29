@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Check, X } from '@lucide/vue'
 import { useTraining, formatShortDate, weekdayName } from '@/composables/useTraining'
@@ -19,6 +19,7 @@ import { EXERCISE_MAP } from '@/data/exercises'
 import PlanSession from '@/components/plan/PlanSession.vue'
 import FreeCheckin from '@/components/plan/FreeCheckin.vue'
 import MuscleHeatMap from '@/components/plan/MuscleHeatMap.vue'
+import ExerciseDrawer from '@/components/ExerciseDrawer.vue'
 
 const router = useRouter()
 const training = useTraining()
@@ -30,6 +31,14 @@ const phase = computed(() => training.week.value.phase)
 const goal = computed(() => GOALS.find((g) => g.id === training.config.value.goal) ?? GOALS[0])
 const weekDays = computed(() => training.week.value.days)
 const activeLogs = computed(() => training.logsForDate(training.activeDate.value))
+
+/** 当前打开详情的动作；空表示抽屉关闭 */
+const detailId = ref<string | null>(null)
+
+/** 详情里上一项/下一项只在该训练日内走动，不把用户带到动作库的浏览序列里 */
+const dayExerciseIds = computed(() => [
+  ...new Set(training.selectedSession.value.exercises.map((item) => item.exerciseId)),
+])
 
 const dayExercises = computed(() =>
   weekDays.value.reduce((sum, d) => sum + d.exercises.length, 0),
@@ -102,13 +111,26 @@ function backToAtlas() {
   void router.push({ name: 'atlas', hash: '#model' })
 }
 
-/** 从计划里的动作跳到解剖模型详情 */
+/** 在计划页就地展开动作详情，不把用户甩回动作库首页 */
 function openExercise(id: string) {
-  void router.push({ name: 'atlas', query: { ex: id } })
+  detailId.value = id
+}
+
+/** 详情里主动选择「在 3D 模型中查看」时才离开计划页 */
+function viewExerciseInModel() {
+  const id = detailId.value
+  if (!id) return
+  detailId.value = null
+  void router.push({ name: 'atlas', query: { ex: id }, hash: '#model' })
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') backToAtlas()
+  if (e.key !== 'Escape') return
+  if (detailId.value) {
+    detailId.value = null
+    return
+  }
+  backToAtlas()
 }
 
 onMounted(() => {
@@ -492,5 +514,14 @@ onBeforeUnmount(() => {
         </p>
       </footer>
     </div>
+
+    <ExerciseDrawer
+      :open="!!detailId"
+      :exercise-id="detailId"
+      :scope-ids="dayExerciseIds"
+      @close="detailId = null"
+      @select="detailId = $event"
+      @view-in-model="viewExerciseInModel"
+    />
   </section>
 </template>

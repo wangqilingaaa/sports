@@ -1830,6 +1830,11 @@ a {
   background: rgba(178, 58, 43, 0.035);
 }
 
+/* 计划页的详情里肌群行只做展示，不提供点击筛选 */
+.act-row.is-static:hover {
+  background: none;
+}
+
 .act-name {
   font-size: 12px;
   color: var(--ink);

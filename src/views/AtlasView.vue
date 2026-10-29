@@ -75,20 +75,6 @@ watch(atlas.query, () => {
   atlas.clearSelection()
 })
 
-watch(drawerOpen, (open) => {
-  document.body.classList.toggle('is-locked', open)
-})
-
-// 切换动作时把抽屉内容滚回顶部
-watch(atlas.selectedId, () => {
-  nextTick(() => {
-    requestAnimationFrame(() => {
-      const body = document.querySelector('.drawer-body')
-      if (body) body.scrollTop = 0
-    })
-  })
-})
-
 onMounted(() => {
   window.addEventListener('keydown', onKey)
 })
@@ -141,5 +127,14 @@ onBeforeUnmount(() => {
 
   <AppFooter />
 
-  <ExerciseDrawer @view-in-model="viewInModel" />
+  <ExerciseDrawer
+    :open="drawerOpen"
+    :exercise-id="atlas.selectedId.value"
+    :scope-ids="atlas.results.value.map((item) => item.id)"
+    library
+    @close="atlas.closeDrawer()"
+    @select="atlas.selectExercise"
+    @filter-muscle="atlas.toggleMuscle"
+    @view-in-model="viewInModel"
+  />
 </template>

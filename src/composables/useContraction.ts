@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { useAtlas } from './useAtlas'
 import { EXERCISE_MAP } from '@/data/exercises'
 import type { Exercise } from '@/data/types'
@@ -33,12 +33,15 @@ function start() {
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2)
 
-export function useContraction() {
+export function useContraction(exerciseId?: MaybeRefOrGetter<string | null | undefined>) {
   start()
 
-  const subject = computed<Exercise>(
-    () => atlas.activeExercise.value ?? atlas.results.value[0] ?? EXERCISE_MAP.get(DEFAULT_EXERCISE)!,
-  )
+  const subject = computed<Exercise>(() => {
+    // 指定动作时以它为准（计划页的详情抽屉）；否则跟随动作库当前选中/筛选结果
+    const pinned = exerciseId ? toValue(exerciseId) : null
+    const picked = pinned ? EXERCISE_MAP.get(pinned) : undefined
+    return picked ?? atlas.activeExercise.value ?? atlas.results.value[0] ?? EXERCISE_MAP.get(DEFAULT_EXERCISE)!
+  })
 
   const isIsometric = computed(() => subject.value.tempo[0] === 0 && subject.value.tempo[1] === 0)
 

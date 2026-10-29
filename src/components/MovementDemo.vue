@@ -6,8 +6,13 @@ import { useContraction } from '@/composables/useContraction'
 import { EQUIPMENT_MAP, PATTERN_LABEL } from '@/data/equipment'
 import MotionFigure from './MotionFigure.vue'
 
+const props = defineProps<{
+  /** 指定要演示的动作；缺省时跟随动作库当前动作 */
+  exerciseId?: string
+}>()
+
 const atlas = useAtlas()
-const { subject, c, clock, cycleLen, phase } = useContraction()
+const { subject, c, clock, cycleLen, phase } = useContraction(() => props.exerciseId)
 
 /**
  * 标题用「动作模式」而不是 demo.kind。

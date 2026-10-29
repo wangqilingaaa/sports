@@ -123,9 +123,9 @@ function roleLabel(role: PlannedExercise['role']): string {
           <span class="sx-index">{{ String(i + 1).padStart(2, '0') }}</span>
           <div class="sx-info">
             <div class="sx-name-row">
-              <button class="sx-name" :title="`在解剖模型中查看「${exerciseOf(item)?.zh ?? ''}」`" @click="emit('open-exercise', item.exerciseId)">
+              <button class="sx-name" :title="`查看「${exerciseOf(item)?.zh ?? ''}」动作详情`" @click="emit('open-exercise', item.exerciseId)">
                 {{ exerciseOf(item)?.zh ?? item.exerciseId }}
-                <span class="sx-open">3D →</span>
+                <span class="sx-open">详情 →</span>
               </button>
               <span class="sx-role">{{ roleLabel(item.role) }}</span>
             </div>
