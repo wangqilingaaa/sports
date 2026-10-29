@@ -4,7 +4,7 @@
  * 只复制 src/data/demo-map.ts 里登记过的 slug（每个 3 帧），
  * 不把 906 张图全量塞进产物里。
  *
- *   npm run sync:demo
+ *   pnpm run sync:demo
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -15,7 +15,7 @@ const pkgDir = path.join(root, 'node_modules/@bryllim/workout-guide')
 const outDir = path.join(root, 'public/demo')
 
 if (!fs.existsSync(pkgDir)) {
-  console.error('✗ 找不到 @bryllim/workout-guide，先跑 npm install')
+  console.error('✗ 找不到 @bryllim/workout-guide，先跑 pnpm install')
   process.exit(1)
 }
 

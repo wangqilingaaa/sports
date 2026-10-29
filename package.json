@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
@@ -22,6 +23,11 @@
     "typescript": "~5.7.2",
     "vite": "^6.0.7",
     "vue-tsc": "^2.2.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "description": "解剖图谱 · 力量训练动作库：按器械/肌群检索动作，人体肌肉高亮与收缩示意"
 }
