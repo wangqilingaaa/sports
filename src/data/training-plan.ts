@@ -63,7 +63,10 @@ export interface Prescription {
 }
 
 export interface PlannedExercise {
+  /** 第几次训练 + 训练日 + 位序号，随训练次序变化 */
   uid: string
+  /** 训练日 key + 位序号，跨轮次稳定，用于记住用户换过的动作 */
+  slotKey: string
   exerciseId: string
   role: RoleId
   /** 该动作在当天担任的角色名，如「水平推」 */
@@ -71,6 +74,9 @@ export interface PlannedExercise {
   prescription: Prescription
   note: string
 }
+
+/** 动作位替换表：slotKey → 动作库 id；只换动作，处方仍由该位角色推导 */
+export type PlanSwaps = Record<string, string>
 
 export interface PlanDay {
   key: string
@@ -643,8 +649,12 @@ export function parseRpe(rpe: string): number {
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length)
 }
 
-/** 按训练次序构造第 index 次训练 */
-export function buildSession(config: PlanConfig, index: number): PlanSession {
+/** 按训练次序构造第 index 次训练；swaps 里记着的动作位会被替换 */
+export function buildSession(
+  config: PlanConfig,
+  index: number,
+  swaps: PlanSwaps = {},
+): PlanSession {
   const split = SPLIT_MAP.get(config.split) ?? SPLITS[0]
   const total = PLAN_ROUNDS * split.days
   const safeIndex = Math.min(total, Math.max(1, Math.trunc(index)))
@@ -664,23 +674,30 @@ export function buildSession(config: PlanConfig, index: number): PlanSession {
     en: tpl.en,
     focus: tpl.focus,
     warmup: tpl.warmup,
-    exercises: slots.map((slot, slotIndex) => ({
-      uid: `${safeIndex}:${tpl.key}:${slotIndex}`,
-      exerciseId: slot.pool[Math.min(config.level - 1, slot.pool.length - 1)],
-      role: slot.role,
-      label: slot.label,
-      prescription: prescriptionFor(config.goal, config.level, phase.id, slot.role, split.id),
-      note: ROLE_NOTE[slot.role],
-    })),
+    exercises: slots.map((slot, slotIndex) => {
+      const slotKey = `${tpl.key}:${slotIndex}`
+      return {
+        uid: `${safeIndex}:${slotKey}`,
+        slotKey,
+        exerciseId:
+          swaps[slotKey] || slot.pool[Math.min(config.level - 1, slot.pool.length - 1)],
+        role: slot.role,
+        label: slot.label,
+        prescription: prescriptionFor(config.goal, config.level, phase.id, slot.role, split.id),
+        note: ROLE_NOTE[slot.role],
+      }
+    }),
   }
 
   return { index: safeIndex, round, phase, day, note: ROUND_NOTES[round - 1] ?? '' }
 }
 
 /** 全程训练序列：PLAN_ROUNDS × 每个循环的训练次数 */
-export function buildPlan(config: PlanConfig): PlanSession[] {
+export function buildPlan(config: PlanConfig, swaps: PlanSwaps = {}): PlanSession[] {
   const split = SPLIT_MAP.get(config.split) ?? SPLITS[0]
-  return Array.from({ length: PLAN_ROUNDS * split.days }, (_, i) => buildSession(config, i + 1))
+  return Array.from({ length: PLAN_ROUNDS * split.days }, (_, i) =>
+    buildSession(config, i + 1, swaps),
+  )
 }
 
 export type VolumeGroupType = 'large' | 'posterior' | 'medium' | 'small' | 'core'

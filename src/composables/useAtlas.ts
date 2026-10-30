@@ -1,25 +1,10 @@
 import { computed, ref } from 'vue'
 import { EXERCISES, EXERCISE_MAP } from '@/data/exercises'
 import { MUSCLES, MUSCLE_MAP } from '@/data/muscles'
-import { EQUIPMENT, EQUIPMENT_MAP, PATTERN_LABEL } from '@/data/equipment'
-import { buildIndex, searchIndex } from '@/data/search'
+import { EQUIPMENT } from '@/data/equipment'
+import { searchIndex } from '@/data/search'
+import { EXERCISE_INDEX as INDEX } from '@/data/exercise-search'
 import type { EquipmentId, MuscleId, Role } from '@/data/types'
-
-const INDEX = buildIndex(
-  EXERCISES.map((ex) => {
-    const equip = EQUIPMENT_MAP.get(ex.equipment)!
-    const muscles = ex.muscles.map((h) => MUSCLE_MAP.get(h.id)!).filter(Boolean)
-    return {
-      id: ex.id,
-      zh: ex.zh,
-      en: ex.en,
-      aliases: ex.aliases,
-      equipmentText: [equip.zh, equip.en, ...equip.aliases],
-      muscleText: muscles.flatMap((mu) => [mu.zh, mu.en, ...mu.aliases.slice(0, 2)]),
-      patternText: PATTERN_LABEL[ex.pattern],
-    }
-  }),
-)
 
 const ROLE_RANK: Record<Role, number> = { primary: 3, secondary: 2, stabilizer: 1 }
 

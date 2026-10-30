@@ -14,6 +14,7 @@ import {
   type GoalId,
   type Level,
   type PlanConfig,
+  type PlanSwaps,
   type SplitId,
 } from '@/data/training-plan'
 import type { MuscleId } from '@/data/types'
@@ -117,6 +118,18 @@ const VALID_SPLITS: SplitId[] = SPLITS.map((split) => split.id)
 
 const config = ref<PlanConfig>(defaultConfig())
 const logs = ref<LogEntry[]>([])
+/** 用户自己换过的动作位；计划本身仍由配置推导，这里是覆盖层 */
+const swaps = ref<PlanSwaps>({})
+
+/** 存档里的替换表只认仍在动作库里的 id，避免数据更新后留下空动作 */
+function normalizeSwaps(raw: unknown): PlanSwaps {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: PlanSwaps = {}
+  for (const [slotKey, exerciseId] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof exerciseId === 'string' && EXERCISE_MAP.has(exerciseId)) out[slotKey] = exerciseId
+  }
+  return out
+}
 
 /** 旧版按日期存储的记录：用旧 startDate 折算成「第几次训练」 */
 function legacyIndexForDate(date: string, startDate: string, days: DaysPerWeek): number {
@@ -194,7 +207,11 @@ function hydrate() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
-    const parsed = JSON.parse(raw) as { config?: Record<string, unknown>; logs?: unknown[] }
+    const parsed = JSON.parse(raw) as {
+      config?: Record<string, unknown>
+      logs?: unknown[]
+      swaps?: unknown
+    }
     const c = parsed.config
     let legacyStart: string | null = null
     let legacyDays: DaysPerWeek = SPLIT_MAP.get(config.value.split)?.days ?? 4
@@ -224,6 +241,7 @@ function hydrate() {
           .filter((entry): entry is LogEntry => !!entry),
       )
     }
+    swaps.value = normalizeSwaps(parsed.swaps)
   } catch {
     /* 存档不可用时按默认计划运行 */
   }
@@ -231,7 +249,10 @@ function hydrate() {
 
 function persist() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ config: config.value, logs: logs.value }))
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ config: config.value, logs: logs.value, swaps: swaps.value }),
+    )
   } catch {
     /* 隐私模式或配额不足时静默失败 */
   }
@@ -239,12 +260,12 @@ function persist() {
 
 hydrate()
 persist()
-watch([config, logs], persist, { deep: true })
+watch([config, logs, swaps], persist, { deep: true })
 
 const selectedIndex = ref(1)
 const heatRange = ref<HeatRange>('session')
 
-const plan = computed(() => buildPlan(config.value))
+const plan = computed(() => buildPlan(config.value, swaps.value))
 const totalSessions = computed(() => plan.value.length)
 const activeSplit = computed(() => SPLIT_MAP.get(config.value.split) ?? SPLITS[0])
 const activeSession = computed(() => plan.value[selectedIndex.value - 1] ?? plan.value[0])
@@ -493,6 +514,24 @@ function setConfig(patch: Partial<PlanConfig>) {
   selectedIndex.value = Math.min(selectedIndex.value, totalSessions.value)
 }
 
+/** 记住某个动作位换成的动作；id 不在动作库时忽略 */
+function swapExercise(slotKey: string, exerciseId: string) {
+  if (!EXERCISE_MAP.has(exerciseId)) return
+  swaps.value = { ...swaps.value, [slotKey]: exerciseId }
+}
+
+/** 恢复某个动作位的模板默认动作 */
+function resetSwap(slotKey: string) {
+  if (!(slotKey in swaps.value)) return
+  const next = { ...swaps.value }
+  delete next[slotKey]
+  swaps.value = next
+}
+
+function isSwapped(slotKey: string): boolean {
+  return Object.prototype.hasOwnProperty.call(swaps.value, slotKey)
+}
+
 /** 跳到下一次未完成的训练 */
 function syncNext() {
   selectedIndex.value = nextIndex.value
@@ -528,6 +567,9 @@ export function useTraining() {
     upsertLog,
     removeLog,
     setConfig,
+    swapExercise,
+    resetSwap,
+    isSwapped,
     syncNext,
   }
 }

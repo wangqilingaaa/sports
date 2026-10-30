@@ -13,6 +13,7 @@ import {
   type Level,
   type Phase,
   type PlanDay,
+  type PlannedExercise,
   type SplitId,
 } from '@/data/training-plan'
 import { MUSCLE_MAP } from '@/data/muscles'
@@ -23,6 +24,7 @@ import PlanVolumeAudit from '@/components/plan/PlanVolumeAudit.vue'
 import FreeCheckin from '@/components/plan/FreeCheckin.vue'
 import MuscleHeatMap from '@/components/plan/MuscleHeatMap.vue'
 import ExerciseDrawer from '@/components/ExerciseDrawer.vue'
+import PlanSwapDrawer from '@/components/plan/PlanSwapDrawer.vue'
 
 const router = useRouter()
 const training = useTraining()
@@ -38,6 +40,14 @@ const totalSessions = computed(() => training.totalSessions.value)
 
 /** 当前打开详情的动作；空表示抽屉关闭 */
 const detailId = ref<string | null>(null)
+
+/** 正在替换的动作位（slotKey）；空表示替换面板关闭 */
+const swapSlot = ref<string | null>(null)
+
+/** 从当前训练日实时取这个位子，替换后动作名会立即更新 */
+const swapItem = computed(
+  () => activeDay.value.exercises.find((item) => item.slotKey === swapSlot.value) ?? null,
+)
 
 /** 详情里上一项/下一项只在该训练日内走动，不把用户带到动作库的浏览序列里 */
 const dayExerciseIds = computed(() => [
@@ -175,7 +185,14 @@ function backToAtlas() {
 
 /** 在计划页就地展开动作详情，不把用户甩回动作库首页 */
 function openExercise(id: string) {
+  swapSlot.value = null
   detailId.value = id
+}
+
+/** 换动作也走就地抽屉，候选只保留同主动肌动作 */
+function openSwap(item: PlannedExercise) {
+  detailId.value = null
+  swapSlot.value = item.slotKey
 }
 
 /** 详情里主动选择「在 3D 模型中查看」时才离开计划页 */
@@ -188,6 +205,10 @@ function viewExerciseInModel() {
 
 function onKey(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
+  if (swapSlot.value) {
+    swapSlot.value = null
+    return
+  }
   if (detailId.value) {
     detailId.value = null
     return
@@ -357,6 +378,7 @@ onBeforeUnmount(() => {
           <PlanSession
             :session="training.activeSession.value"
             @open-exercise="openExercise"
+            @swap="openSwap"
           />
 
           <!-- 本次记录 -->
@@ -571,6 +593,13 @@ onBeforeUnmount(() => {
       @close="detailId = null"
       @select="detailId = $event"
       @view-in-model="viewExerciseInModel"
+    />
+
+    <PlanSwapDrawer
+      :open="!!swapItem"
+      :item="swapItem"
+      :session-index="training.selectedIndex.value"
+      @close="swapSlot = null"
     />
   </section>
 </template>

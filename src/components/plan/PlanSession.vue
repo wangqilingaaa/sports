@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
+import { ArrowLeftRight } from '@lucide/vue'
 import { useTraining } from '@/composables/useTraining'
 import { parseReps, parseRpe, type PlanSession, type PlannedExercise } from '@/data/training-plan'
 import { EXERCISE_MAP } from '@/data/exercises'
@@ -11,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-exercise', id: string): void
+  (e: 'swap', item: PlannedExercise): void
 }>()
 
 const training = useTraining()
@@ -27,17 +29,36 @@ interface RowForm {
 
 const forms = reactive<Record<string, RowForm>>({})
 
+/** 每行上次初始化的动作 + 处方戳：换动作或换分期时只重置受影响的那几行 */
+const seededStamps = reactive<Record<string, string>>({})
+
+function rowStamp(item: PlannedExercise): string {
+  const p = item.prescription
+  return `${item.exerciseId}|${p.sets}|${p.reps}|${p.rpe}`
+}
+
+function seedRow(item: PlannedExercise) {
+  const saved = training.logFor(sessionIndex.value, item.exerciseId)
+  const last = training.lastLogFor(item.exerciseId)
+  forms[item.uid] = {
+    sets: saved?.sets ?? item.prescription.sets,
+    reps: saved?.reps ?? parseReps(item.prescription.reps),
+    weight: saved?.weight ?? last?.weight ?? 0,
+    rpe: saved?.rpe ?? parseRpe(item.prescription.rpe),
+  }
+  seededStamps[item.uid] = rowStamp(item)
+}
+
 function seed() {
-  for (const key of Object.keys(forms)) delete forms[key]
   for (const item of day.value.exercises) {
-    const saved = training.logFor(sessionIndex.value, item.exerciseId)
-    const last = training.lastLogFor(item.exerciseId)
-    forms[item.uid] = {
-      sets: saved?.sets ?? item.prescription.sets,
-      reps: saved?.reps ?? parseReps(item.prescription.reps),
-      weight: saved?.weight ?? last?.weight ?? 0,
-      rpe: saved?.rpe ?? parseRpe(item.prescription.rpe),
-    }
+    if (forms[item.uid] && seededStamps[item.uid] === rowStamp(item)) continue
+    seedRow(item)
+  }
+  const alive = new Set(day.value.exercises.map((item) => item.uid))
+  for (const uid of Object.keys(forms)) {
+    if (alive.has(uid)) continue
+    delete forms[uid]
+    delete seededStamps[uid]
   }
 }
 
@@ -133,6 +154,22 @@ function roleLabel(role: PlannedExercise['role']): string {
                 <span class="sx-open">详情 →</span>
               </button>
               <span class="sx-role">{{ roleLabel(item.role) }}</span>
+              <span
+                v-if="training.isSwapped(item.slotKey)"
+                class="sx-swapped"
+                title="已换成同肌群动作，点「换」可恢复默认"
+              >
+                已调整
+              </span>
+              <button
+                class="sx-swap"
+                :title="`给「${item.label}」换一个动作`"
+                :aria-label="`替换「${exerciseOf(item)?.zh ?? ''}」`"
+                @click="emit('swap', item)"
+              >
+                <ArrowLeftRight :size="9" />
+                换
+              </button>
             </div>
             <div class="sx-sub">
               {{ item.label }}
