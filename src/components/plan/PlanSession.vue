@@ -37,13 +37,43 @@ function rowStamp(item: PlannedExercise): string {
   return `${item.exerciseId}|${p.sets}|${p.reps}|${p.rpe}`
 }
 
+/** 新周期第一次练时，用上一周期末次重量做小幅渐进；下肢 +5kg，其他 +2.5kg */
+const LOWER_MUSCLES = new Set([
+  'quadriceps',
+  'hamstrings',
+  'gluteus-maximus',
+  'gluteus-medius',
+  'adductors',
+  'gastrocnemius',
+  'soleus',
+])
+
+const BODYWEIGHT_EQUIPMENT = new Set(['bodyweight', 'pullup-bar', 'dip-bar'])
+const ASSISTED_EXERCISES = new Set(['assisted-pullup', 'assisted-chin-up'])
+
+function weightIncrement(exerciseId: string): number {
+  const ex = EXERCISE_MAP.get(exerciseId)
+  if (!ex) return 2.5
+  if (BODYWEIGHT_EQUIPMENT.has(ex.equipment)) return 0
+  // 助力引体/反手引体的「重量」是辅助重量，进阶应该减少辅助
+  if (ASSISTED_EXERCISES.has(exerciseId)) return -2.5
+  return ex.muscles.some((hit) => hit.role === 'primary' && LOWER_MUSCLES.has(hit.id))
+    ? 5
+    : 2.5
+}
+
 function seedRow(item: PlannedExercise) {
   const saved = training.logFor(sessionIndex.value, item.exerciseId, item.slotKey)
   const last = training.lastLogFor(item.exerciseId)
+  const lastWeight = last?.weight ?? 0
+  const carriedWeight =
+    !saved && last && last.cycle !== training.config.value.cycle && lastWeight > 0
+      ? lastWeight + weightIncrement(item.exerciseId)
+      : lastWeight
   forms[item.uid] = {
     sets: saved?.sets ?? item.prescription.sets,
     reps: saved?.reps ?? parseReps(item.prescription.reps),
-    weight: saved?.weight ?? last?.weight ?? 0,
+    weight: saved?.weight ?? carriedWeight,
     rpe: saved?.rpe ?? parseRpe(item.prescription.rpe),
   }
   seededStamps[item.uid] = rowStamp(item)
@@ -163,6 +193,7 @@ function roleLabel(role: PlannedExercise['role']): string {
                 已调整
               </span>
               <button
+                v-if="item.role !== 'conditioning'"
                 class="sx-swap"
                 :title="`给「${item.label}」换一个动作`"
                 :aria-label="`替换「${exerciseOf(item)?.zh ?? ''}」`"

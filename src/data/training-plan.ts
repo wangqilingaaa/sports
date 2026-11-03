@@ -8,7 +8,8 @@
  * 动作本身从动作库中按难度阶梯抽取，因此计划里的每个动作都能在肌骨模型里查看。
  */
 
-import type { MuscleId } from './types'
+import { EXERCISE_MAP } from './exercises'
+import type { EquipmentId, MuscleId } from './types'
 
 export type GoalId = 'hypertrophy' | 'strength' | 'recondition'
 export type PhaseId = 'adaptation' | 'volume' | 'intensity' | 'deload'
@@ -31,6 +32,10 @@ export interface PlanConfig {
   goal: GoalId
   level: Level
   split: SplitId
+  /** 每周实际训练次数；只用于容量折算与减载提醒，不改变训练序列 */
+  perWeek: DaysPerWeek
+  /** 当前周期，从 1 开始；换周期只重置完成度，不清空历史记录 */
+  cycle: number
 }
 
 export interface Goal {
@@ -165,7 +170,7 @@ export const GOALS: Goal[] = [
     id: 'strength',
     zh: '力量突破',
     en: 'Max Strength',
-    desc: '低次数高强度，主项 3–6 次、组间充分休息，用更高张力换取神经适应。',
+    desc: '低次数高强度，主项 3–6 次、组间充分休息，用更高张力换取神经适应；建议配合全身或上下肢分化，让主项每轮暴露两次。',
     badge: '3–6 次/组',
   },
   {
@@ -210,7 +215,7 @@ export const PHASES: Phase[] = [
     name: '减载恢复期',
     en: 'Deload & Supercompensation',
     rounds: [8, 8],
-    intent: '容量下降约四成、强度回落，让延迟性疲劳消散，超量恢复在此时真正发生。',
+    intent: '容量以本轮峰值为基准下降约四到五成，强度同时回落，让延迟性疲劳消散，超量恢复在此时真正发生。',
     volume: '低容量',
     rpe: 'RPE 5–6',
   },
@@ -489,12 +494,113 @@ const FULL_B: DayTemplate = {
   ],
 }
 
+const STRENGTH_FULL_A: DayTemplate = {
+  key: 'str-full-a',
+  title: '全身力量 A · 蹲推拉',
+  en: 'Full Body Strength A',
+  focus: '股四头肌 · 胸大肌 · 背阔肌',
+  warmup: WARMUP_FULL,
+  slots: [
+    { role: 'main', label: '深蹲', pool: ['goblet-squat', 'barbell-squat', 'front-squat'] },
+    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
+    { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
+    { role: 'secondary', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
+    { role: 'accessory', label: '后束', pool: ['face-pull', 'reverse-pec-deck', 'prone-y-raise'] },
+    { role: 'core', label: '核心', pool: ['plank', 'dead-bug', 'ab-wheel-rollout'] },
+  ],
+}
+
+const STRENGTH_FULL_B: DayTemplate = {
+  key: 'str-full-b',
+  title: '全身力量 B · 髋推拉',
+  en: 'Full Body Strength B',
+  focus: '臀大肌 · 上胸 · 背部',
+  warmup: WARMUP_FULL,
+  slots: [
+    { role: 'main', label: '髋铰链', pool: ['hip-thrust-machine', 'barbell-hip-thrust', 'barbell-deadlift'] },
+    { role: 'secondary', label: '深蹲变式', pool: ['goblet-squat', 'front-squat', 'barbell-squat'] },
+    { role: 'main', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
+    { role: 'main', label: '垂直拉', pool: ['assisted-pullup', 'lat-pulldown', 'pullup'] },
+    { role: 'secondary', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
+    { role: 'core', label: '核心', pool: ['side-plank', 'pallof-press', 'cable-woodchop'] },
+  ],
+}
+
+const STRENGTH_UPPER_A: DayTemplate = {
+  key: 'str-upper-a',
+  title: '上肢力量 A · 卧推与划船',
+  en: 'Upper Strength A',
+  focus: '胸大肌 · 背阔肌 · 三角肌',
+  warmup: WARMUP_UPPER,
+  slots: [
+    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
+    { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
+    { role: 'secondary', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
+    { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
+    { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'overhead-cable-ext', 'skull-crusher'] },
+    { role: 'core', label: '核心', pool: ['plank', 'dead-bug', 'ab-wheel-rollout'] },
+  ],
+}
+
+const STRENGTH_UPPER_B: DayTemplate = {
+  key: 'str-upper-b',
+  title: '上肢力量 B · 上斜与垂直拉',
+  en: 'Upper Strength B',
+  focus: '上胸 · 背阔肌 · 三角肌后束',
+  warmup: WARMUP_UPPER,
+  slots: [
+    { role: 'main', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
+    { role: 'main', label: '垂直拉', pool: ['assisted-pullup', 'lat-pulldown', 'pullup'] },
+    { role: 'secondary', label: '水平拉', pool: ['chest-supported-row', 'seated-cable-row', 't-bar-row'] },
+    { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
+    { role: 'accessory', label: '肱二头', pool: ['cable-curl', 'barbell-curl', 'incline-dumbbell-curl'] },
+    { role: 'core', label: '核心', pool: ['side-plank', 'pallof-press', 'cable-woodchop'] },
+  ],
+}
+
+const STRENGTH_LOWER_A: DayTemplate = {
+  key: 'str-lower-a',
+  title: '下肢力量 A · 深蹲',
+  en: 'Lower Strength A',
+  focus: '股四头肌 · 臀大肌 · 腘绳肌',
+  warmup: WARMUP_LOWER,
+  slots: [
+    { role: 'main', label: '深蹲', pool: ['goblet-squat', 'barbell-squat', 'front-squat'] },
+    { role: 'secondary', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
+    { role: 'accessory', label: '单腿', pool: ['step-up', 'bulgarian-split-squat', 'barbell-lunge'] },
+    { role: 'accessory', label: '腘绳肌', pool: ['leg-curl', 'seated-leg-curl', 'nordic-curl'] },
+    { role: 'accessory', label: '小腿', pool: ['machine-calf-raise', 'donkey-calf-raise', 'smith-calf-raise'] },
+    { role: 'core', label: '核心', pool: ['dead-bug', 'side-plank', 'copenhagen-plank'] },
+  ],
+}
+
+const STRENGTH_LOWER_B: DayTemplate = {
+  key: 'str-lower-b',
+  title: '下肢力量 B · 髋与深蹲变式',
+  en: 'Lower Strength B',
+  focus: '臀大肌 · 股四头肌 · 腘绳肌',
+  warmup: WARMUP_LOWER,
+  slots: [
+    { role: 'main', label: '髋铰链', pool: ['hip-thrust-machine', 'barbell-hip-thrust', 'barbell-deadlift'] },
+    { role: 'secondary', label: '深蹲变式', pool: ['goblet-squat', 'front-squat', 'barbell-squat'] },
+    { role: 'accessory', label: '腘绳肌', pool: ['seated-leg-curl', 'nordic-curl', 'leg-curl'] },
+    { role: 'accessory', label: '小腿', pool: ['seated-calf-raise', 'smith-calf-raise', 'donkey-calf-raise'] },
+    { role: 'core', label: '核心', pool: ['side-plank-hip-dip', 'cable-pallof-hold', 'ab-wheel-kneel'] },
+  ],
+}
+
 const SPLIT_TEMPLATES: Record<SplitId, DayTemplate[]> = {
   full: [FULL_A, FULL_B],
   ppl: [PPL3_PUSH, PPL3_PULL, PPL3_LEGS],
   ul: [UPPER_A, LOWER_A, UPPER_B, LOWER_B],
   hybrid: [UPPER_A, LOWER_A, PUSH_B, PULL_B, LEGS_B],
   ppl2: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B],
+}
+
+/** 力量目标的专项模板：主项频率更高、孤立动作更少；只覆盖推荐分化 */
+const STRENGTH_TEMPLATES: Partial<Record<SplitId, DayTemplate[]>> = {
+  full: [STRENGTH_FULL_A, STRENGTH_FULL_B],
+  ul: [STRENGTH_UPPER_A, STRENGTH_LOWER_A, STRENGTH_UPPER_B, STRENGTH_LOWER_B],
 }
 
 /** 分化本身的组数加成：循环越短，单次主项多补 1 组；孤立动作靠槽位补量，不再叠组 */
@@ -515,7 +621,7 @@ const ROUND_NOTES = [
   '完成度 ≥80% 的主项 +2.5kg（下肢 +5kg），否则重复上次负荷。',
   '次数下调、负荷上调，主项留 1 次余力，孤立动作到力竭前 1 次。',
   '强度峰值阶段，只对状态最好的 1–2 个主项冲击顶层组。',
-  '减载约 40%，全部动作 RPE ≤6，让超量恢复发生。',
+  '减载：容量以本轮峰值为基准下降约四到五成，全部动作 RPE ≤6，让超量恢复发生。',
 ]
 
 const ROLE_NOTE: Record<RoleId, string> = {
@@ -562,7 +668,11 @@ function repsFor(goal: GoalId, phase: PhaseId, role: RoleId): string {
   return accessory ? '12–15' : role === 'main' ? '8–10' : '10–12'
 }
 
-function rpeFor(phase: PhaseId): string {
+function rpeFor(phase: PhaseId, goal: GoalId, role: RoleId): string {
+  // 力量目标的孤立/核心动作不需要跟着主项冲到 8–9
+  if (goal === 'strength' && (role === 'accessory' || role === 'core') && phase !== 'deload') {
+    return 'RPE 7–8'
+  }
   switch (phase) {
     case 'adaptation':
       return 'RPE 6–7'
@@ -584,20 +694,47 @@ function restFor(goal: GoalId, role: RoleId): number {
   return table[goal][role]
 }
 
-function loadFor(goal: GoalId, phase: PhaseId, role: RoleId): string {
+/** 力量目标的强度按水平分级；入门不直接上 85% 以上 */
+const STRENGTH_PERCENT: Record<Level, Record<PhaseId, string>> = {
+  1: {
+    adaptation: '60–65% 1RM',
+    volume: '70–75% 1RM',
+    intensity: '78–82% 1RM',
+    deload: '50–55% 1RM',
+  },
+  2: {
+    adaptation: '65–70% 1RM',
+    volume: '75–80% 1RM',
+    intensity: '82–87% 1RM',
+    deload: '55–60% 1RM',
+  },
+  3: {
+    adaptation: '70–75% 1RM',
+    volume: '78–83% 1RM',
+    intensity: '87–92% 1RM',
+    deload: '55–60% 1RM',
+  },
+}
+
+/** 只有能稳定量化 1RM 的器械才写 %1RM；器械/自重改 RIR */
+const STRENGTH_LOADABLE: ReadonlySet<EquipmentId> = new Set<EquipmentId>([
+  'barbell',
+  'dumbbell',
+  'smith',
+])
+
+function loadFor(
+  goal: GoalId,
+  phase: PhaseId,
+  role: RoleId,
+  level: Level,
+  strengthLoadable: boolean,
+): string {
   if (role === 'conditioning') return '循环 3 轮'
   if (goal === 'strength') {
     if (role !== 'main' && role !== 'secondary') return '保留 2 次余力'
-    switch (phase) {
-      case 'adaptation':
-        return '65–70% 1RM'
-      case 'volume':
-        return '75–80% 1RM'
-      case 'intensity':
-        return '85–90% 1RM'
-      default:
-        return '55–60% 1RM'
-    }
+    if (!strengthLoadable) return '保留 2–3 次余力'
+    return STRENGTH_PERCENT[level][phase]
   }
   if (goal === 'recondition') return role === 'main' ? '心率 65–75%' : '循环节奏 · 不憋气'
   switch (phase) {
@@ -618,19 +755,30 @@ function prescriptionFor(
   phase: PhaseId,
   role: RoleId,
   split: SplitId,
+  exerciseId: string,
 ): Prescription {
   const base = SETS_BY_PHASE[phase][role]
   // 减载期不叠加分化加成，否则 full/PPL 的减载课仍接近容量期
   const splitBonus = phase === 'deload' ? 0 : (SPLIT_SET_BONUS[split][role] ?? 0)
   const levelPenalty =
     level === 1 && (role === 'secondary' || role === 'accessory' || role === 'core') ? -1 : 0
-  const sets = base + splitBonus + levelPenalty
+  // 力量目标：没有主项加成的分化补 1 组主项，同时压缩孤立动作
+  const strengthMainBonus =
+    goal === 'strength' && phase !== 'deload' && role === 'main' && !SPLIT_SET_BONUS[split].main
+      ? 1
+      : 0
+  const strengthAccessoryPenalty = goal === 'strength' && role === 'accessory' ? -1 : 0
+  const sets = base + splitBonus + levelPenalty + strengthMainBonus + strengthAccessoryPenalty
+  // 减载允许降到 1 组，否则入门水平的减载幅度会被 2 组下限吃掉
+  const minSets = phase === 'deload' ? 1 : 2
+  const exercise = EXERCISE_MAP.get(exerciseId)
+  const strengthLoadable = !!exercise && STRENGTH_LOADABLE.has(exercise.equipment)
   return {
-    sets: Math.max(2, sets),
+    sets: Math.max(minSets, sets),
     reps: repsFor(goal, phase, role),
-    rpe: rpeFor(phase),
+    rpe: rpeFor(phase, goal, role),
     rest: restFor(goal, role),
-    load: loadFor(goal, phase, role),
+    load: loadFor(goal, phase, role, level, strengthLoadable),
   }
 }
 
@@ -661,7 +809,9 @@ export function buildSession(
   const safeIndex = Math.min(total, Math.max(1, Math.trunc(index)))
   const round = Math.ceil(safeIndex / split.days)
   const phase = phaseOf(round)
-  const templates = SPLIT_TEMPLATES[split.id]
+  const templates =
+    (config.goal === 'strength' ? STRENGTH_TEMPLATES[split.id] : undefined) ??
+    SPLIT_TEMPLATES[split.id]
   const tpl = templates[(safeIndex - 1) % split.days]
   const conditioning =
     config.goal === 'recondition'
@@ -677,14 +827,22 @@ export function buildSession(
     warmup: tpl.warmup,
     exercises: slots.map((slot, slotIndex) => {
       const slotKey = `${tpl.key}:${slotIndex}`
+      const exerciseId =
+        swaps[slotKey] || slot.pool[Math.min(config.level - 1, slot.pool.length - 1)]
       return {
         uid: `${safeIndex}:${slotKey}`,
         slotKey,
-        exerciseId:
-          swaps[slotKey] || slot.pool[Math.min(config.level - 1, slot.pool.length - 1)],
+        exerciseId,
         role: slot.role,
         label: slot.label,
-        prescription: prescriptionFor(config.goal, config.level, phase.id, slot.role, split.id),
+        prescription: prescriptionFor(
+          config.goal,
+          config.level,
+          phase.id,
+          slot.role,
+          split.id,
+          exerciseId,
+        ),
         note: ROLE_NOTE[slot.role],
       }
     }),

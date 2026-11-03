@@ -220,6 +220,33 @@
   color: var(--ink-4);
 }
 
+.split-note.is-warn {
+  color: var(--accent);
+}
+
+.deload-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0 42px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--card-2);
+  font-size: 9.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.deload-banner button {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border-bottom: 1px dotted var(--accent);
+}
+
 .plan-link {
   font-size: 9.5px;
   letter-spacing: 0.06em;
@@ -1441,11 +1468,43 @@
 }
 
 /* ───────────── 容量审计 ───────────── */
+.audit-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
 .audit-phase {
   font-size: 8.5px;
   letter-spacing: 0.06em;
   color: var(--ink-4);
   white-space: nowrap;
+}
+
+.audit-mode {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.audit-mode button {
+  padding: 2px 7px;
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  background: var(--card-2);
+  transition: color 0.16s, background 0.16s;
+}
+
+.audit-mode button:hover {
+  color: var(--ink);
+}
+
+.audit-mode button.is-active {
+  background: var(--accent);
+  color: #fdf8f0;
 }
 
 .audit-list {
@@ -2128,6 +2187,10 @@
 
   .split-note {
     padding-left: 0;
+  }
+
+  .deload-banner {
+    margin-left: 0;
   }
 
   .audit-list {

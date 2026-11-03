@@ -53,7 +53,7 @@ const targetMuscleNames = computed(() =>
     .join(' · '),
 )
 
-/** 候选池：与当前动作共享同一个主动肌；同动作模式、同器械、难度接近的排前面 */
+/** 候选池：共享主动肌，且保持复合/孤立属性一致，避免把主项换成孤立动作 */
 const pool = computed<Exercise[]>(() => {
   const ex = current.value
   if (!ex || !props.item) return []
@@ -63,6 +63,7 @@ const pool = computed<Exercise[]>(() => {
       .filter((entry) => entry.slotKey !== props.item!.slotKey)
       .map((entry) => entry.exerciseId),
   )
+  const isolation = ex.pattern === 'isolation'
   const affinity = (cand: Exercise): number =>
     (cand.pattern === ex.pattern ? 0 : 4) +
     (cand.equipment === ex.equipment ? 0 : 2) +
@@ -71,6 +72,7 @@ const pool = computed<Exercise[]>(() => {
     (cand) =>
       cand.id !== ex.id &&
       !usedElsewhere.has(cand.id) &&
+      (cand.pattern === 'isolation') === isolation &&
       cand.muscles.some((hit) => hit.role === 'primary' && targets.has(hit.id)),
   ).sort((a, b) => affinity(a) - affinity(b) || a.zh.localeCompare(b.zh))
 })
@@ -176,10 +178,12 @@ onBeforeUnmount(() => document.body.classList.remove('is-locked'))
               {{ current ? PATTERN_LABEL[current.pattern] : '' }}
             </div>
             <p class="swap-hint">
-              只换动作，组数、次数、RPE 与休息沿用这个位的处方；本轮容量审计会按新动作重算。
+              候选只保留同主动肌、同复合/孤立属性的动作；组数、次数、RPE 与休息沿用这个位的处方，
+              本轮容量审计会按新动作重算。
             </p>
             <p v-if="logged" class="swap-warn">
-              本次已按「{{ current?.zh }}」打卡，替换后需按新动作重新打卡；旧记录仍保留在本次记录里。
+              本次已按「{{ current?.zh }}」打卡，替换后旧记录不再计入新动作，需要按新动作重新打卡；
+              旧记录可在本次记录里删除。
             </p>
           </header>
 
@@ -189,7 +193,7 @@ onBeforeUnmount(() => document.body.classList.remove('is-locked'))
               ref="searchRef"
               v-model="query"
               type="search"
-              placeholder="搜索同肌群动作：名称 / 拼音 / 器械"
+              placeholder="搜索同肌群、同模式动作：名称 / 拼音 / 器械"
               aria-label="搜索替换动作"
             />
             <button v-if="query" class="swap-clear" aria-label="清空搜索" @click="query = ''">

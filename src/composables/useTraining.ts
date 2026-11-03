@@ -24,7 +24,9 @@ export type HeatRange = 'session' | 'recent' | 'all'
 
 export interface LogEntry {
   id: string
-  /** 全程第几次训练，从 1 开始 */
+  /** 第几个周期，从 1 开始 */
+  cycle: number
+  /** 本周期内第几次训练，从 1 开始 */
   sessionIndex: number
   exerciseId: string
   /** 计划动作位；自由打卡为空。用于区分同一天重复动作，兼容旧记录 */
@@ -76,6 +78,11 @@ export interface VolumeAuditItem {
   min: number
   max: number
   status: VolumeStatus
+  /** 按当前每周频率折算后的组数 */
+  weeklySets: number
+  weeklyMin: number
+  weeklyMax: number
+  weeklyStatus: VolumeStatus
 }
 
 const STORAGE_KEY = 'atlas.training.v1'
@@ -97,6 +104,7 @@ const LEGACY_WEEKDAY_OFFSETS: Record<DaysPerWeek, number[]> = {
 interface LegacyLog {
   id?: unknown
   date?: unknown
+  cycle?: unknown
   sessionIndex?: unknown
   exerciseId?: unknown
   slotKey?: unknown
@@ -113,6 +121,8 @@ function defaultConfig(): PlanConfig {
     goal: 'hypertrophy',
     level: 2,
     split: 'ul',
+    perWeek: 4,
+    cycle: 1,
   }
 }
 
@@ -126,12 +136,32 @@ const logs = ref<LogEntry[]>([])
 /** 用户自己换过的动作位；计划本身仍由配置推导，这里是覆盖层 */
 const swaps = ref<PlanSwaps>({})
 
-/** 存档里的替换表只认仍在动作库里的 id，避免数据更新后留下空动作 */
+/** 换动作必须保持复合/孤立属性并共享主动肌；防止老存档把主项换成孤立动作 */
+function swapCompatible(currentId: string, nextId: string): boolean {
+  const current = EXERCISE_MAP.get(currentId)
+  const next = EXERCISE_MAP.get(nextId)
+  if (!current || !next) return false
+  if ((current.pattern === 'isolation') !== (next.pattern === 'isolation')) return false
+  const primaries = new Set(
+    current.muscles.filter((hit) => hit.role === 'primary').map((hit) => hit.id),
+  )
+  return next.muscles.some((hit) => hit.role === 'primary' && primaries.has(hit.id))
+}
+
+/** 存档里的替换表只认仍在动作库、且与默认动作兼容的 id */
 function normalizeSwaps(raw: unknown): PlanSwaps {
   if (!raw || typeof raw !== 'object') return {}
+  const defaults = new Map<string, string>()
+  for (const session of buildPlan(config.value)) {
+    for (const item of session.day.exercises) defaults.set(item.slotKey, item.exerciseId)
+  }
   const out: PlanSwaps = {}
   for (const [slotKey, exerciseId] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof exerciseId === 'string' && EXERCISE_MAP.has(exerciseId)) out[slotKey] = exerciseId
+    if (typeof exerciseId !== 'string') continue
+    const defaultId = defaults.get(slotKey)
+    if (defaultId && EXERCISE_MAP.has(exerciseId) && swapCompatible(defaultId, exerciseId)) {
+      out[slotKey] = exerciseId
+    }
   }
   return out
 }
@@ -177,9 +207,12 @@ function normalizeLog(
         ? parseDateKey(raw.date).getTime()
         : Date.now()
   const total = PLAN_ROUNDS * days
+  const cycle =
+    typeof raw.cycle === 'number' && raw.cycle >= 1 ? Math.trunc(raw.cycle) : 1
 
   return {
     id: raw.id,
+    cycle,
     sessionIndex: Math.min(total, Math.max(1, Math.round(index))),
     exerciseId: raw.exerciseId,
     slotKey: typeof raw.slotKey === 'string' ? raw.slotKey : undefined,
@@ -196,7 +229,8 @@ function normalizeLog(
 function dedupeLogs(list: LogEntry[]): LogEntry[] {
   const map = new Map<string, LogEntry>()
   for (const log of list) {
-    const key = `${log.sessionIndex}:${log.slotKey ?? log.exerciseId}`
+    // 换动作后同一动作位会同时存在新旧动作的记录，key 必须带上 exerciseId
+    const key = `${log.cycle}:${log.sessionIndex}:${log.slotKey ?? log.exerciseId}:${log.exerciseId}`
     const prev = map.get(key)
     if (!prev) {
       map.set(key, log)
@@ -240,6 +274,13 @@ function hydrate() {
         config.value.split = c.split as SplitId
         legacyDays = SPLIT_MAP.get(config.value.split)?.days ?? legacyDays
       }
+      config.value.perWeek =
+        typeof c.perWeek === 'number' && VALID_DAYS.includes(c.perWeek as DaysPerWeek)
+          ? (c.perWeek as DaysPerWeek)
+          : legacyDays
+      if (typeof c.cycle === 'number' && c.cycle >= 1) {
+        config.value.cycle = Math.trunc(c.cycle)
+      }
       if (typeof c.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.startDate)) {
         legacyStart = c.startDate
       }
@@ -278,40 +319,45 @@ const heatRange = ref<HeatRange>('session')
 const plan = computed(() => buildPlan(config.value, swaps.value))
 const totalSessions = computed(() => plan.value.length)
 const activeSplit = computed(() => SPLIT_MAP.get(config.value.split) ?? SPLITS[0])
+/** 一轮需要的周数；每周训练次数不等于分化天数时用来做时间换算 */
+const weeksPerRound = computed(() => activeSplit.value.days / config.value.perWeek)
+const planWeeks = computed(() => totalSessions.value / config.value.perWeek)
 const activeSession = computed(() => plan.value[selectedIndex.value - 1] ?? plan.value[0])
 const activeDay = computed(() => activeSession.value.day)
 
-/** 一次训练至少完成 80% 的动作位才算完成，避免只记一个动作就推进 */
+/** 一次训练至少完成 80% 的计划组数才算完成；按动作位封顶，避免一个动作多做几组补掉缺练 */
 const SESSION_COMPLETION_RATIO = 0.8
 
-/** 已完成的训练次序：计划动作位覆盖率达到阈值，且 sessionKey 属于当前分化的训练日 */
+/** 已完成的训练次序：当前周期内计划组数覆盖率达到阈值，且打卡属于当前训练日 */
 const doneIndexes = computed(() => {
   const set = new Set<number>()
-  const loggedBySession = new Map<
-    number,
-    { slotKeys: Set<string>; exerciseIds: Set<string> }
-  >()
+  const logsBySession = new Map<number, LogEntry[]>()
 
   for (const log of logs.value) {
+    if (log.cycle !== config.value.cycle) continue
     if (!log.sessionKey || log.sessionIndex > totalSessions.value) continue
-    const session = plan.value[log.sessionIndex - 1]
-    if (!session || session.day.key !== log.sessionKey) continue
-    const logged = loggedBySession.get(log.sessionIndex) ?? {
-      slotKeys: new Set<string>(),
-      exerciseIds: new Set<string>(),
-    }
-    if (log.slotKey) logged.slotKeys.add(log.slotKey)
-    else logged.exerciseIds.add(log.exerciseId)
-    loggedBySession.set(log.sessionIndex, logged)
+    const list = logsBySession.get(log.sessionIndex) ?? []
+    list.push(log)
+    logsBySession.set(log.sessionIndex, list)
   }
 
-  for (const [index, logged] of loggedBySession) {
+  for (const [index, sessionLogs] of logsBySession) {
     const session = plan.value[index - 1]
     if (!session || !session.day.exercises.length) continue
-    const covered = session.day.exercises.filter(
-      (item) => logged.slotKeys.has(item.slotKey) || logged.exerciseIds.has(item.exerciseId),
-    ).length
-    if (covered / session.day.exercises.length >= SESSION_COMPLETION_RATIO) set.add(index)
+    let plannedSets = 0
+    let loggedSets = 0
+    for (const item of session.day.exercises) {
+      plannedSets += item.prescription.sets
+      const log = sessionLogs.find(
+        (entry) =>
+          entry.sessionKey === session.day.key &&
+          (entry.slotKey
+            ? entry.slotKey === item.slotKey && entry.exerciseId === item.exerciseId
+            : entry.exerciseId === item.exerciseId),
+      )
+      loggedSets += Math.min(log?.sets ?? 0, item.prescription.sets)
+    }
+    if (plannedSets > 0 && loggedSets / plannedSets >= SESSION_COMPLETION_RATIO) set.add(index)
   }
 
   return set
@@ -334,16 +380,18 @@ function sessionDone(index: number): boolean {
 }
 
 function logsForSession(index: number): LogEntry[] {
-  return logs.value.filter((l) => l.sessionIndex === index)
+  return logs.value.filter((l) => l.cycle === config.value.cycle && l.sessionIndex === index)
 }
 
 function logFor(index: number, exerciseId: string, slotKey?: string): LogEntry | null {
   return (
     logs.value.find(
       (l) =>
+        l.cycle === config.value.cycle &&
         l.sessionIndex === index &&
         (slotKey
-          ? l.slotKey === slotKey || (!l.slotKey && !!l.sessionKey && l.exerciseId === exerciseId)
+          ? (l.slotKey === slotKey && l.exerciseId === exerciseId) ||
+            (!l.slotKey && !!l.sessionKey && l.exerciseId === exerciseId)
           : l.exerciseId === exerciseId),
     ) ?? null
   )
@@ -361,12 +409,15 @@ function lastLogFor(exerciseId: string): LogEntry | null {
 function upsertLog(input: LogInput) {
   const idx = logs.value.findIndex(
     (l) =>
+      l.cycle === config.value.cycle &&
       l.sessionIndex === input.sessionIndex &&
       (input.slotKey
-        ? l.slotKey === input.slotKey || (!l.slotKey && l.exerciseId === input.exerciseId)
+        ? (l.slotKey === input.slotKey && l.exerciseId === input.exerciseId) ||
+          (!l.slotKey && l.sessionKey === input.sessionKey && l.exerciseId === input.exerciseId)
         : l.exerciseId === input.exerciseId),
   )
   const clean = {
+    cycle: config.value.cycle,
     sessionIndex: Math.max(1, Math.round(input.sessionIndex)),
     exerciseId: input.exerciseId,
     slotKey: input.slotKey,
@@ -420,16 +471,23 @@ const heatIndexes = computed(() => {
 const heatLogs = computed(() => {
   const range = heatIndexes.value
   if (!range) return logs.value
-  return logs.value.filter((l) => l.sessionIndex >= range.from && l.sessionIndex <= range.to)
+  return logs.value.filter(
+    (l) =>
+      l.cycle === config.value.cycle &&
+      l.sessionIndex >= range.from &&
+      l.sessionIndex <= range.to,
+  )
 })
 
 const heatScopeLabel = computed(() => {
-  if (heatRange.value === 'all') return '全部记录'
+  if (heatRange.value === 'all') return '全部记录（含历史周期）'
   if (heatRange.value === 'recent') {
     const from = Math.max(1, selectedIndex.value - 7)
-    return from === selectedIndex.value ? `第 ${from} 练` : `第 ${from}–${selectedIndex.value} 练`
+    return from === selectedIndex.value
+      ? `本周期第 ${from} 练`
+      : `本周期第 ${from}–${selectedIndex.value} 练`
   }
-  return `第 ${selectedIndex.value} 练`
+  return `本周期第 ${selectedIndex.value} 练`
 })
 
 /** 肌群训练强度：有效组 = 组数 × 该动作对该肌群的激活占比 × RPE 系数 */
@@ -461,7 +519,9 @@ const heatMax = computed(() => Math.max(1, ...heatDetail.value.map((m) => m.sets
 const trainedMuscleCount = computed(() => heatDetail.value.filter((m) => m.sets > 0.15).length)
 
 const sessionStats = computed<SessionStats>(() => {
-  const list = logs.value.filter((l) => l.sessionIndex === selectedIndex.value)
+  const list = logs.value.filter(
+    (l) => l.cycle === config.value.cycle && l.sessionIndex === selectedIndex.value,
+  )
   let sets = 0
   let volume = 0
   let workSeconds = 0
@@ -487,10 +547,11 @@ function muscleCredit(role: 'primary' | 'secondary' | 'stabilizer'): number {
 /** 当前轮的计划容量：按处方累计每肌群直接组，并按分期与水平折算目标区间 */
 const volumeAudit = computed<VolumeAuditItem[]>(() => {
   const phase = activeSession.value.phase
-  const scale =
-    PHASE_VOLUME_SCALE[phase.id] *
-    LEVEL_VOLUME_SCALE[config.value.level] *
-    SPLIT_VOLUME_SCALE[config.value.split]
+  const phaseLevelScale =
+    PHASE_VOLUME_SCALE[phase.id] * LEVEL_VOLUME_SCALE[config.value.level]
+  const roundScale = phaseLevelScale * SPLIT_VOLUME_SCALE[config.value.split]
+  // 一轮不一定等于一周；按实际频率折算后，才能和每周容量指南比较
+  const weeklyScale = config.value.perWeek / activeSplit.value.days
   const targets = VOLUME_TARGETS[config.value.goal]
   const sessions = plan.value.filter((session) => session.round === activeSession.value.round)
   const totals = new Map<string, number>()
@@ -516,11 +577,28 @@ const volumeAudit = computed<VolumeAuditItem[]>(() => {
 
   return VOLUME_GROUP_DEFS.map((group) => {
     const sets = Math.round((totals.get(group.id) ?? 0) * 10) / 10
+    const weeklySets = Math.round(sets * weeklyScale * 10) / 10
     const [minRaw, maxRaw] = targets[group.type]
-    const min = Math.max(1, Math.floor(minRaw * scale))
-    const max = Math.max(min, Math.ceil(maxRaw * scale))
+    const min = Math.max(1, Math.floor(minRaw * roundScale))
+    const max = Math.max(min, Math.ceil(maxRaw * roundScale))
+    // 每周参考区间不乘分化系数：分化只影响一轮的训练日数，不影响每周指南
+    const weeklyMin = Math.max(1, Math.floor(minRaw * phaseLevelScale))
+    const weeklyMax = Math.max(weeklyMin, Math.ceil(maxRaw * phaseLevelScale))
     const status: VolumeStatus = sets < min ? 'low' : sets > max ? 'high' : 'ok'
-    return { id: group.id, zh: group.zh, sets, min, max, status }
+    const weeklyStatus: VolumeStatus =
+      weeklySets < weeklyMin ? 'low' : weeklySets > weeklyMax ? 'high' : 'ok'
+    return {
+      id: group.id,
+      zh: group.zh,
+      sets,
+      min,
+      max,
+      status,
+      weeklySets,
+      weeklyMin,
+      weeklyMax,
+      weeklyStatus,
+    }
   })
 })
 
@@ -550,8 +628,10 @@ const recentRatio = computed(() => {
 })
 
 const recommendation = computed(() => {
-  if (!logs.value.length) {
-    return '还没有打卡记录：先从第 1 练开始，用适应期的轻负荷把动作轨迹和器械高度确定下来。'
+  if (!logs.value.some((l) => l.cycle === config.value.cycle)) {
+    return config.value.cycle > 1
+      ? `第 ${config.value.cycle} 周期还没有打卡记录：从第 1 练开始，先沿用上一周期的重量，动作稳定后再加负荷。`
+      : '还没有打卡记录：先从第 1 练开始，用适应期的轻负荷把动作轨迹和器械高度确定下来。'
   }
   const ratio = recentRatio.value
   if (ratio >= 0.8) {
@@ -563,14 +643,52 @@ const recommendation = computed(() => {
   return `最近 4 练完成度 ${Math.round(ratio * 100)}%：先减一档负荷重新建立节奏，缺练时不要用加倍容量补偿。`
 })
 
+/** 每 6 周至少安排一次减载；如果 RPE 持续偏高且完成度下降，也提前提醒 */
+const DELOAD_AFTER_WEEKS = 6
+
+const deloadAdvice = computed(() => {
+  const currentLogs = logs.value.filter((l) => l.cycle === config.value.cycle)
+  if (currentLogs.length < 4) return { due: false, reason: '' }
+  if (activeSession.value.phase.id === 'deload') return { due: false, reason: '' }
+
+  const first = Math.min(...currentLogs.map((l) => l.createdAt))
+  const weeks = (Date.now() - first) / (7 * 86400000)
+  if (weeks >= DELOAD_AFTER_WEEKS) {
+    return {
+      due: true,
+      reason: `本周期已训练约 ${weeks.toFixed(0)} 周，建议插入 1 轮减载再继续。`,
+    }
+  }
+
+  const recent = [...currentLogs].sort((a, b) => a.createdAt - b.createdAt).slice(-12)
+  const avgRpe = recent.reduce((sum, l) => sum + l.rpe, 0) / recent.length
+  if (recent.length >= 8 && avgRpe >= 9 && recentRatio.value < SESSION_COMPLETION_RATIO) {
+    return {
+      due: true,
+      reason: `最近记录平均 RPE ${avgRpe.toFixed(1)}，完成度降到 ${Math.round(
+        recentRatio.value * 100,
+      )}%，建议插入 1 轮减载。`,
+    }
+  }
+
+  return { due: false, reason: '' }
+})
+
 function setConfig(patch: Partial<PlanConfig>) {
-  config.value = { ...config.value, ...patch }
+  const next = { ...config.value, ...patch }
+  // 换分化时默认回到该分化的自然频率，用户仍可再手动调整
+  if (patch.split && patch.perWeek === undefined) {
+    next.perWeek = SPLIT_MAP.get(next.split)?.days ?? next.perWeek
+  }
+  config.value = next
   selectedIndex.value = Math.min(selectedIndex.value, totalSessions.value)
 }
 
-/** 记住某个动作位换成的动作；id 不在动作库时忽略 */
+/** 记住某个动作位换成的动作；不兼容的替换会被忽略 */
 function swapExercise(slotKey: string, exerciseId: string) {
   if (!EXERCISE_MAP.has(exerciseId)) return
+  const item = activeDay.value.exercises.find((entry) => entry.slotKey === slotKey)
+  if (!item || !swapCompatible(item.exerciseId, exerciseId)) return
   swaps.value = { ...swaps.value, [slotKey]: exerciseId }
 }
 
@@ -586,6 +704,14 @@ function isSwapped(slotKey: string): boolean {
   return Object.prototype.hasOwnProperty.call(swaps.value, slotKey)
 }
 
+/** 开始下一周期：保留历史记录，完成度按新周期重新计算 */
+function startNextCycle() {
+  if (!allDone.value) return
+  config.value = { ...config.value, cycle: config.value.cycle + 1 }
+  selectedIndex.value = 1
+  heatRange.value = 'session'
+}
+
 /** 跳到下一次未完成的训练 */
 function syncNext() {
   selectedIndex.value = nextIndex.value
@@ -598,6 +724,8 @@ export function useTraining() {
     plan,
     totalSessions,
     activeSplit,
+    weeksPerRound,
+    planWeeks,
     selectedIndex,
     activeSession,
     activeDay,
@@ -611,6 +739,7 @@ export function useTraining() {
     volumeAudit,
     streak,
     recommendation,
+    deloadAdvice,
     nextIndex,
     completedCount,
     allDone,
@@ -624,6 +753,7 @@ export function useTraining() {
     swapExercise,
     resetSwap,
     isSwapped,
+    startNextCycle,
     syncNext,
   }
 }

@@ -9,6 +9,7 @@ import {
   PHASES,
   SPLITS,
   heatTier,
+  type DaysPerWeek,
   type GoalId,
   type Level,
   type Phase,
@@ -30,6 +31,7 @@ const router = useRouter()
 const training = useTraining()
 
 const LEVELS: Level[] = [1, 2, 3]
+const FREQUENCIES: DaysPerWeek[] = [2, 3, 4, 5, 6]
 
 const phase = computed(() => training.activeSession.value.phase)
 const goal = computed(() => GOALS.find((g) => g.id === training.config.value.goal) ?? GOALS[0])
@@ -37,6 +39,17 @@ const split = computed(() => training.activeSplit.value)
 const activeDay = computed(() => training.activeDay.value)
 const activeLogs = computed(() => training.logsForSession(training.selectedIndex.value))
 const totalSessions = computed(() => training.totalSessions.value)
+const perWeek = computed(() => training.config.value.perWeek)
+const cycle = computed(() => training.config.value.cycle)
+const weeksPerRound = computed(() => training.weeksPerRound.value.toFixed(1))
+const planWeeks = computed(() => training.planWeeks.value.toFixed(1))
+
+/** 力量目标只有全身/上下肢有专项模板；其他分化的主项仍是 1 次/轮 */
+const strengthSplitWarning = computed(() =>
+  training.config.value.goal === 'strength' && ['ppl', 'hybrid', 'ppl2'].includes(split.value.id)
+    ? '力量目标建议全身或上下肢分化：当前分化每个主项仍为 1 次/轮，专项性不如力量模板。'
+    : '',
+)
 
 /** 当前打开详情的动作；空表示抽屉关闭 */
 const detailId = ref<string | null>(null)
@@ -61,8 +74,17 @@ const doneExercises = computed(
       (item) => !!training.logFor(training.selectedIndex.value, item.exerciseId, item.slotKey),
     ).length,
 )
+const plannedSets = computed(() =>
+  activeDay.value.exercises.reduce((sum, item) => sum + item.prescription.sets, 0),
+)
+const loggedSets = computed(() =>
+  activeDay.value.exercises.reduce((sum, item) => {
+    const log = training.logFor(training.selectedIndex.value, item.exerciseId, item.slotKey)
+    return sum + Math.min(log?.sets ?? 0, item.prescription.sets)
+  }, 0),
+)
 const completionPct = computed(() =>
-  Math.min(100, Math.round((doneExercises.value / Math.max(1, totalExercises.value)) * 100)),
+  Math.min(100, Math.round((loggedSets.value / Math.max(1, plannedSets.value)) * 100)),
 )
 
 const topMuscles = computed(() => training.heatDetail.value.slice(0, 6))
@@ -73,6 +95,11 @@ function phaseStart(p: Phase): number {
 
 function phaseEnd(p: Phase): number {
   return p.rounds[1] * split.value.days
+}
+
+function phaseWeeks(p: Phase): string {
+  const rounds = p.rounds[1] - p.rounds[0] + 1
+  return ((rounds * split.value.days) / perWeek.value).toFixed(1)
 }
 
 function phaseState(p: Phase): 'done' | 'current' | 'upcoming' {
@@ -104,6 +131,11 @@ function setSplit(id: SplitId) {
   if (training.config.value.split === id) return
   training.setConfig({ split: id })
   training.syncNext()
+}
+
+function setPerWeek(n: DaysPerWeek) {
+  if (training.config.value.perWeek === n) return
+  training.setConfig({ perWeek: n })
 }
 
 function selectPhase(p: Phase) {
@@ -159,6 +191,20 @@ watch(() => training.selectedIndex.value, () => void nextTick(scrollActiveIntoVi
 function goNext() {
   training.syncNext()
   void nextTick(scrollActiveIntoView)
+}
+
+function goNextOrNextCycle() {
+  if (training.allDone.value) {
+    training.startNextCycle()
+    void nextTick(scrollActiveIntoView)
+    return
+  }
+  goNext()
+}
+
+function jumpToDeload() {
+  const target = PHASES.find((p) => p.id === 'deload')
+  if (target) selectPhase(target)
 }
 
 function exerciseName(id: string): string {
@@ -235,8 +281,11 @@ onBeforeUnmount(() => {
         <div class="plan-head-side">
           <button class="plan-back" @click="backToAtlas"><ArrowLeft :size="12" />返回动作库</button>
           <div class="plan-now">
-            <b>第 {{ training.selectedIndex.value }} 练</b>
-            <span>{{ phase.name }} · {{ split.zh }} · {{ phase.rpe }} · 共 {{ totalSessions }} 练</span>
+            <b>第 {{ cycle }} 周期 · 第 {{ training.selectedIndex.value }} 练</b>
+            <span>
+              {{ phase.name }} · {{ split.zh }} · 每周 {{ perWeek }} 练 · {{ phase.rpe }} ·
+              共 {{ totalSessions }} 练
+            </span>
           </div>
         </div>
       </header>
@@ -289,11 +338,44 @@ onBeforeUnmount(() => {
           <span class="control-summary">
             {{ split.zh }} · {{ split.days }} 练/循环 · 共 {{ totalSessions }} 练
           </span>
-          <button class="plan-link" :disabled="training.allDone.value" @click="goNext">
-            {{ training.allDone.value ? '全部训练已完成' : '跳到下一次训练' }}
+          <button class="plan-link" @click="goNextOrNextCycle">
+            {{
+              training.allDone.value
+                ? `开始第 ${cycle + 1} 周期`
+                : '跳到下一次训练'
+            }}
           </button>
         </div>
+        <div class="control-row">
+          <span class="control-key">频率</span>
+          <div class="control-chips">
+            <button
+              v-for="n in FREQUENCIES"
+              :key="n"
+              class="pchip is-compact"
+              :class="{ 'is-active': training.config.value.perWeek === n }"
+              :title="`每周实际训练 ${n} 次；只用于容量折算与减载提醒，不绑定日期`"
+              @click="setPerWeek(n)"
+            >
+              <b>{{ n }}</b>
+              <em>练/周</em>
+            </button>
+          </div>
+          <span class="control-summary">
+            每周 {{ perWeek }} 练 · 一轮约 {{ weeksPerRound }} 周 · 全程约 {{ planWeeks }} 周
+          </span>
+        </div>
         <p class="split-note">{{ split.desc }} 适合{{ split.levelHint }}。</p>
+        <p v-if="strengthSplitWarning" class="split-note is-warn">{{ strengthSplitWarning }}</p>
+        <div v-if="training.deloadAdvice.value.due" class="deload-banner">
+          <span>{{ training.deloadAdvice.value.reason }}</span>
+          <button
+            title="跳到减载分期查看处方；不会清空记录，完成后回到原轮次继续"
+            @click="jumpToDeload"
+          >
+            查看减载处方
+          </button>
+        </div>
       </div>
 
       <div class="plan-grid">
@@ -313,7 +395,7 @@ onBeforeUnmount(() => {
               <span class="phase-name">{{ p.name }}</span>
               <span class="phase-weeks">
                 第 {{ phaseStart(p) }}–{{ phaseEnd(p) }} 练 ·
-                {{ p.rounds[1] - p.rounds[0] + 1 }} 轮 · {{ p.volume }}
+                {{ p.rounds[1] - p.rounds[0] + 1 }} 轮 · ≈{{ phaseWeeks(p) }} 周 · {{ p.volume }}
               </span>
               <span class="phase-bar">
                 <i :style="{ width: phaseProgress(p) }"></i>
@@ -470,7 +552,12 @@ onBeforeUnmount(() => {
                 <div class="plan-kicker">Session {{ training.selectedIndex.value }} · 统计</div>
                 <h3 class="plan-card-title">本次训练负荷</h3>
               </div>
-              <span class="stats-pct">{{ completionPct }}%</span>
+              <span
+                class="stats-pct"
+                :title="`按计划组数完成度：${loggedSets}/${plannedSets} 组，达到 80% 记为完成`"
+              >
+                {{ completionPct }}%
+              </span>
             </header>
 
             <div class="stats-grid">
@@ -483,8 +570,8 @@ onBeforeUnmount(() => {
                 <span>连续完成训练</span>
               </div>
               <div class="stat-cell">
-                <b>{{ training.sessionStats.value.sets }}<small>组</small></b>
-                <span>本次总组数</span>
+                <b>{{ training.sessionStats.value.sets }}<small>/{{ plannedSets }} 组</small></b>
+                <span>本次 / 计划组数</span>
               </div>
               <div class="stat-cell">
                 <b>{{ training.sessionStats.value.minutes }}<small>min</small></b>
@@ -509,6 +596,8 @@ onBeforeUnmount(() => {
             :round="training.activeSession.value.round"
             :phase-name="phase.name"
             :goal-zh="goal.zh"
+            :per-week="perWeek"
+            :split-days="split.days"
           />
 
           <!-- 肌群强度排行 -->
@@ -564,7 +653,7 @@ onBeforeUnmount(() => {
         <div class="plan-principles">
           <div>
             <b>渐进超负荷</b>
-            <span>完成度 ≥80% 才加负荷，否则重复上一次；加负荷优先加重量，其次加次数，最后加组数。</span>
+            <span>计划组数完成度 ≥80% 才加负荷，否则重复上一次；加负荷优先加重量，其次加次数，最后加组数。</span>
           </div>
           <div>
             <b>容量—强度波动</b>
