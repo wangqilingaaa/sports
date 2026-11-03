@@ -30,35 +30,6 @@ const router = useRouter()
 const training = useTraining()
 
 const LEVELS: Level[] = [1, 2, 3]
-const READINESS_DIMS = [
-  {
-    key: 'sleep' as const,
-    zh: '睡眠',
-    options: [
-      { value: 1, label: '不足' },
-      { value: 2, label: '一般' },
-      { value: 3, label: '充足' },
-    ],
-  },
-  {
-    key: 'soreness' as const,
-    zh: '酸痛',
-    options: [
-      { value: 1, label: '明显' },
-      { value: 2, label: '轻微' },
-      { value: 3, label: '无' },
-    ],
-  },
-  {
-    key: 'energy' as const,
-    zh: '精力',
-    options: [
-      { value: 1, label: '低' },
-      { value: 2, label: '中' },
-      { value: 3, label: '高' },
-    ],
-  },
-]
 
 const phase = computed(() => training.activeSession.value.phase)
 const railPhases = computed(() => phasesFor(training.config.value.level))
@@ -162,10 +133,6 @@ function setSplit(id: SplitId) {
 
 function setCompact(value: boolean) {
   training.setConfig({ compact: value })
-}
-
-function setReadiness(key: 'sleep' | 'soreness' | 'energy', value: number) {
-  training.setReadiness({ [key]: value })
 }
 
 function selectPhase(p: Phase) {
@@ -480,33 +447,6 @@ onBeforeUnmount(() => {
           <div v-if="training.recoveryNote.value" class="session-recovery">
             {{ training.recoveryNote.value }}
           </div>
-
-          <!-- 训练前自评：放在训练卡之前，先定状态再按处方练 -->
-          <section class="plan-card readiness-card">
-            <header class="plan-card-head">
-              <div>
-                <div class="plan-kicker">Readiness · 今日状态</div>
-                <h3 class="plan-card-title">训练前自评</h3>
-              </div>
-              <span class="stats-pct">{{ training.readinessScore.value }}/9</span>
-            </header>
-            <div class="readiness-grid">
-              <div v-for="dim in READINESS_DIMS" :key="dim.key" class="readiness-row">
-                <span>{{ dim.zh }}</span>
-                <div class="readiness-options">
-                  <button
-                    v-for="opt in dim.options"
-                    :key="opt.value"
-                    :class="{ 'is-active': training.readiness.value[dim.key] === opt.value }"
-                    @click="setReadiness(dim.key, opt.value)"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p class="readiness-note">{{ training.readinessAdvice.value }}</p>
-          </section>
 
           <!-- 当前训练与打卡 -->
           <PlanSession

@@ -70,15 +70,6 @@ export interface SessionStats {
   minutes: number
 }
 
-export interface Readiness {
-  /** 1 = 不足，3 = 充足 */
-  sleep: number
-  /** 1 = 明显，3 = 无 */
-  soreness: number
-  /** 1 = 低，3 = 高 */
-  energy: number
-}
-
 export type VolumeStatus = 'low' | 'ok' | 'high'
 
 export interface VolumeAuditItem {
@@ -145,7 +136,6 @@ const config = ref<PlanConfig>(defaultConfig())
 const logs = ref<LogEntry[]>([])
 /** 用户自己换过的动作位；计划本身仍由配置推导，这里是覆盖层 */
 const swaps = ref<PlanSwaps>({})
-const readiness = ref<Readiness>({ sleep: 2, soreness: 2, energy: 2 })
 /** 主项目标：exerciseId → 目标 e1RM kg */
 const goals = ref<Record<string, number>>({})
 
@@ -279,7 +269,6 @@ function hydrate() {
       config?: Record<string, unknown>
       logs?: unknown[]
       swaps?: unknown
-      readiness?: unknown
       goals?: unknown
     }
     const c = parsed.config
@@ -317,15 +306,6 @@ function hydrate() {
     }
     swaps.value = normalizeSwaps(parsed.swaps)
     goals.value = normalizeGoals(parsed.goals)
-    if (parsed.readiness && typeof parsed.readiness === 'object') {
-      const rawReadiness = parsed.readiness as Record<string, unknown>
-      for (const key of ['sleep', 'soreness', 'energy'] as const) {
-        const value = rawReadiness[key]
-        if (typeof value === 'number' && value >= 1 && value <= 3) {
-          readiness.value[key] = Math.round(value)
-        }
-      }
-    }
   } catch {
     /* 存档不可用时按默认计划运行 */
   }
@@ -339,7 +319,6 @@ function persist() {
         config: config.value,
         logs: logs.value,
         swaps: swaps.value,
-        readiness: readiness.value,
         goals: goals.value,
       }),
     )
@@ -350,7 +329,7 @@ function persist() {
 
 hydrate()
 persist()
-watch([config, logs, swaps, readiness, goals], persist, { deep: true })
+watch([config, logs, swaps, goals], persist, { deep: true })
 
 const selectedIndex = ref(1)
 const heatRange = ref<HeatRange>('session')
@@ -789,28 +768,6 @@ const recoveryNote = computed(() => {
   return `距上次训练${name}约 ${hours < 1 ? '不到 1' : Math.round(hours)} 小时；同一肌群建议间隔 ≥48 小时，今天可减 1–2 组或换部位。`
 })
 
-const readinessScore = computed(
-  () => readiness.value.sleep + readiness.value.soreness + readiness.value.energy,
-)
-
-const readinessAdvice = computed(() => {
-  if (readinessScore.value <= 4) {
-    return '状态偏低：主项减 1 组、RPE 上限 8，不做顶层组；今天以完成动作为主。'
-  }
-  if (readinessScore.value >= 8) {
-    return '状态良好：按计划执行，主项最后一组可留 1 次余力。'
-  }
-  return '状态一般：按计划执行；如果主项 RPE 超过目标，减 1 组或降 5%。'
-})
-
-function setReadiness(patch: Partial<Readiness>) {
-  const next = { ...readiness.value, ...patch }
-  for (const key of ['sleep', 'soreness', 'energy'] as const) {
-    next[key] = Math.min(3, Math.max(1, Math.round(next[key])))
-  }
-  readiness.value = next
-}
-
 function setConfig(patch: Partial<PlanConfig>) {
   config.value = { ...config.value, ...patch }
   selectedIndex.value = Math.min(selectedIndex.value, totalSessions.value)
@@ -887,10 +844,6 @@ export function useTraining() {
     recommendation,
     deloadAdvice,
     recoveryNote,
-    readiness,
-    readinessAdvice,
-    readinessScore,
-    setReadiness,
     nextIndex,
     completedCount,
     allDone,

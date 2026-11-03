@@ -1548,58 +1548,6 @@
   color: #fdf8f0;
 }
 
-.readiness-grid {
-  display: grid;
-  gap: 7px;
-  padding: 12px 14px 4px;
-}
-
-.readiness-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.readiness-row > span {
-  flex: 0 0 34px;
-  font-size: 9.5px;
-  color: var(--ink-3);
-}
-
-.readiness-options {
-  display: flex;
-  gap: 3px;
-}
-
-.readiness-options button {
-  padding: 3px 7px;
-  font-size: 8.5px;
-  letter-spacing: 0.03em;
-  color: var(--ink-3);
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  transition: color 0.16s, background 0.16s, border-color 0.16s;
-}
-
-.readiness-options button:hover {
-  color: var(--ink);
-}
-
-.readiness-options button.is-active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fdf8f0;
-}
-
-.readiness-note {
-  margin: 0;
-  padding: 8px 14px 14px;
-  font-size: 9.5px;
-  line-height: 1.7;
-  color: var(--ink-3);
-}
-
 .audit-list {
   display: grid;
   gap: 7px;
