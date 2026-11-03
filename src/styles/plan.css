@@ -230,14 +230,6 @@
   color: var(--ink-4);
 }
 
-.split-note.is-warn {
-  color: var(--accent);
-}
-
-.split-note.is-cardio {
-  color: var(--teal);
-}
-
 .deload-banner {
   display: flex;
   align-items: center;

@@ -71,20 +71,9 @@ const activeLogs = computed(() =>
 const totalSessions = computed(() => training.totalSessions.value)
 const cycle = computed(() => training.config.value.cycle)
 
-const splitAdvice = computed(() => ({
-  text: goal.value.splitNote,
-  warn: !goal.value.recommendedSplits.includes(split.value.id),
-}))
-
 function splitRecommended(id: SplitId): boolean {
   return goal.value.recommendedSplits.includes(id)
 }
-
-const cardioNote = computed(() =>
-  training.config.value.goal === 'recondition'
-    ? '有氧基础：非训练日 20–30 分钟 zone 2（能说话、微喘），每周累计 150 分钟；或每天 8–10k 步。收尾摆荡不能替代有氧。'
-    : '',
-)
 
 /** 当前打开详情的动作；空表示抽屉关闭 */
 const detailId = ref<string | null>(null)
@@ -387,9 +376,6 @@ onBeforeUnmount(() => {
             }}
           </button>
         </div>
-        <p class="split-note">{{ split.desc }} 适合{{ split.levelHint }}。</p>
-        <p class="split-note" :class="{ 'is-warn': splitAdvice.warn }">{{ splitAdvice.text }}</p>
-        <p v-if="cardioNote" class="split-note is-cardio">{{ cardioNote }}</p>
         <p v-if="split.id === 'full'" class="split-note">
           <button class="plan-link" @click="setCompact(!training.config.value.compact)">
             {{

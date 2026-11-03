@@ -46,8 +46,6 @@ export interface Goal {
   badge: string
   /** 该目标优先推荐的分化 */
   recommendedSplits: SplitId[]
-  /** 目标与分化的搭配说明 */
-  splitNote: string
 }
 
 export interface Phase {
@@ -171,7 +169,6 @@ export const GOALS: Goal[] = [
     desc: '中等负荷叠加中高容量，主项 6–10 次、孤立 12–20 次，强调离心控制与全程幅度。',
     badge: '6–20 次/组',
     recommendedSplits: ['ul', 'hybrid', 'ppl2'],
-    splitNote: '增肌优先每肌群每周 2 次暴露：上下肢、五分化、推拉腿×2 更稳；推拉腿单轮只有 1 次暴露。',
   },
   {
     id: 'strength',
@@ -180,7 +177,6 @@ export const GOALS: Goal[] = [
     desc: '低次数高强度，主项 3–6 次、组间充分休息，用更高张力换取神经适应；建议配合全身或上下肢分化，让主项每轮暴露两次。',
     badge: '3–6 次/组',
     recommendedSplits: ['full', 'ul'],
-    splitNote: '力量目标优先全身/上下肢，让主项每轮暴露两次；其他分化主项仍为 1 次/轮。',
   },
   {
     id: 'recondition',
@@ -189,7 +185,6 @@ export const GOALS: Goal[] = [
     desc: '高次数短间歇，配合壶铃摆荡循环收尾；每周再安排 150 分钟中等强度有氧或 8–10k 步。',
     badge: '12–20 次/组',
     recommendedSplits: ['full', 'ul', 'ppl'],
-    splitNote: '减脂体能优先全身/上下肢，配合每周 150 分钟有氧；不必追求高分化。',
   },
 ]
 
