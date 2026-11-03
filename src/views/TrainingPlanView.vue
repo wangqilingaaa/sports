@@ -6,10 +6,9 @@ import { useTraining } from '@/composables/useTraining'
 import {
   GOALS,
   HEAT_TIERS,
-  PHASES,
   SPLITS,
   heatTier,
-  type DaysPerWeek,
+  phasesFor,
   type GoalId,
   type Level,
   type Phase,
@@ -31,23 +30,59 @@ const router = useRouter()
 const training = useTraining()
 
 const LEVELS: Level[] = [1, 2, 3]
-const FREQUENCIES: DaysPerWeek[] = [2, 3, 4, 5, 6]
+const READINESS_DIMS = [
+  {
+    key: 'sleep' as const,
+    zh: '睡眠',
+    options: [
+      { value: 1, label: '不足' },
+      { value: 2, label: '一般' },
+      { value: 3, label: '充足' },
+    ],
+  },
+  {
+    key: 'soreness' as const,
+    zh: '酸痛',
+    options: [
+      { value: 1, label: '明显' },
+      { value: 2, label: '轻微' },
+      { value: 3, label: '无' },
+    ],
+  },
+  {
+    key: 'energy' as const,
+    zh: '精力',
+    options: [
+      { value: 1, label: '低' },
+      { value: 2, label: '中' },
+      { value: 3, label: '高' },
+    ],
+  },
+]
 
 const phase = computed(() => training.activeSession.value.phase)
+const railPhases = computed(() => phasesFor(training.config.value.level))
 const goal = computed(() => GOALS.find((g) => g.id === training.config.value.goal) ?? GOALS[0])
 const split = computed(() => training.activeSplit.value)
 const activeDay = computed(() => training.activeDay.value)
-const activeLogs = computed(() => training.logsForSession(training.selectedIndex.value))
+const activeLogs = computed(() =>
+  training.logsForSession(training.selectedIndex.value, activeDay.value.key),
+)
 const totalSessions = computed(() => training.totalSessions.value)
-const perWeek = computed(() => training.config.value.perWeek)
 const cycle = computed(() => training.config.value.cycle)
-const weeksPerRound = computed(() => training.weeksPerRound.value.toFixed(1))
-const planWeeks = computed(() => training.planWeeks.value.toFixed(1))
 
-/** 力量目标只有全身/上下肢有专项模板；其他分化的主项仍是 1 次/轮 */
-const strengthSplitWarning = computed(() =>
-  training.config.value.goal === 'strength' && ['ppl', 'hybrid', 'ppl2'].includes(split.value.id)
-    ? '力量目标建议全身或上下肢分化：当前分化每个主项仍为 1 次/轮，专项性不如力量模板。'
+const splitAdvice = computed(() => ({
+  text: goal.value.splitNote,
+  warn: !goal.value.recommendedSplits.includes(split.value.id),
+}))
+
+function splitRecommended(id: SplitId): boolean {
+  return goal.value.recommendedSplits.includes(id)
+}
+
+const cardioNote = computed(() =>
+  training.config.value.goal === 'recondition'
+    ? '有氧基础：非训练日 20–30 分钟 zone 2（能说话、微喘），每周累计 150 分钟；或每天 8–10k 步。收尾摆荡不能替代有氧。'
     : '',
 )
 
@@ -83,6 +118,14 @@ const loggedSets = computed(() =>
     return sum + Math.min(log?.sets ?? 0, item.prescription.sets)
   }, 0),
 )
+const plannedMinutes = computed(() =>
+  Math.round(
+    activeDay.value.exercises.reduce(
+      (sum, item) => sum + item.prescription.sets * (40 + item.prescription.rest),
+      0,
+    ) / 60,
+  ),
+)
 const completionPct = computed(() =>
   Math.min(100, Math.round((loggedSets.value / Math.max(1, plannedSets.value)) * 100)),
 )
@@ -95,11 +138,6 @@ function phaseStart(p: Phase): number {
 
 function phaseEnd(p: Phase): number {
   return p.rounds[1] * split.value.days
-}
-
-function phaseWeeks(p: Phase): string {
-  const rounds = p.rounds[1] - p.rounds[0] + 1
-  return ((rounds * split.value.days) / perWeek.value).toFixed(1)
 }
 
 function phaseState(p: Phase): 'done' | 'current' | 'upcoming' {
@@ -133,9 +171,12 @@ function setSplit(id: SplitId) {
   training.syncNext()
 }
 
-function setPerWeek(n: DaysPerWeek) {
-  if (training.config.value.perWeek === n) return
-  training.setConfig({ perWeek: n })
+function setCompact(value: boolean) {
+  training.setConfig({ compact: value })
+}
+
+function setReadiness(key: 'sleep' | 'soreness' | 'energy', value: number) {
+  training.setReadiness({ [key]: value })
 }
 
 function selectPhase(p: Phase) {
@@ -203,7 +244,7 @@ function goNextOrNextCycle() {
 }
 
 function jumpToDeload() {
-  const target = PHASES.find((p) => p.id === 'deload')
+  const target = phasesFor(training.config.value.level).find((p) => p.id === 'deload')
   if (target) selectPhase(target)
 }
 
@@ -283,8 +324,7 @@ onBeforeUnmount(() => {
           <div class="plan-now">
             <b>第 {{ cycle }} 周期 · 第 {{ training.selectedIndex.value }} 练</b>
             <span>
-              {{ phase.name }} · {{ split.zh }} · 每周 {{ perWeek }} 练 · {{ phase.rpe }} ·
-              共 {{ totalSessions }} 练
+              {{ phase.name }} · {{ split.zh }} · {{ phase.rpe }} · 共 {{ totalSessions }} 练
             </span>
           </div>
         </div>
@@ -333,6 +373,7 @@ onBeforeUnmount(() => {
             >
               <b>{{ s.zh }}</b>
               <em>{{ s.days }} 练</em>
+              <span v-if="splitRecommended(s.id)" class="pchip-rec">推荐</span>
             </button>
           </div>
           <span class="control-summary">
@@ -346,27 +387,21 @@ onBeforeUnmount(() => {
             }}
           </button>
         </div>
-        <div class="control-row">
-          <span class="control-key">频率</span>
-          <div class="control-chips">
-            <button
-              v-for="n in FREQUENCIES"
-              :key="n"
-              class="pchip is-compact"
-              :class="{ 'is-active': training.config.value.perWeek === n }"
-              :title="`每周实际训练 ${n} 次；只用于容量折算与减载提醒，不绑定日期`"
-              @click="setPerWeek(n)"
-            >
-              <b>{{ n }}</b>
-              <em>练/周</em>
-            </button>
-          </div>
-          <span class="control-summary">
-            每周 {{ perWeek }} 练 · 一轮约 {{ weeksPerRound }} 周 · 全程约 {{ planWeeks }} 周
-          </span>
-        </div>
         <p class="split-note">{{ split.desc }} 适合{{ split.levelHint }}。</p>
-        <p v-if="strengthSplitWarning" class="split-note is-warn">{{ strengthSplitWarning }}</p>
+        <p class="split-note" :class="{ 'is-warn': splitAdvice.warn }">{{ splitAdvice.text }}</p>
+        <p v-if="cardioNote" class="split-note is-cardio">{{ cardioNote }}</p>
+        <p v-if="split.id === 'full'" class="split-note">
+          <button class="plan-link" @click="setCompact(!training.config.value.compact)">
+            {{
+              training.config.value.compact
+                ? '恢复完整版'
+                : '切换到精简版（少 2 个孤立动作）'
+            }}
+          </button>
+          <template v-if="training.config.value.compact">
+            · 当前单次预计 {{ plannedMinutes }} 分钟
+          </template>
+        </p>
         <div v-if="training.deloadAdvice.value.due" class="deload-banner">
           <span>{{ training.deloadAdvice.value.reason }}</span>
           <button
@@ -384,7 +419,7 @@ onBeforeUnmount(() => {
           <!-- 分期时间轴 -->
           <div class="phase-rail">
             <button
-              v-for="(p, i) in PHASES"
+              v-for="(p, i) in railPhases"
               :key="p.id"
               class="phase-card"
               :class="`is-${phaseState(p)}`"
@@ -395,7 +430,7 @@ onBeforeUnmount(() => {
               <span class="phase-name">{{ p.name }}</span>
               <span class="phase-weeks">
                 第 {{ phaseStart(p) }}–{{ phaseEnd(p) }} 练 ·
-                {{ p.rounds[1] - p.rounds[0] + 1 }} 轮 · ≈{{ phaseWeeks(p) }} 周 · {{ p.volume }}
+                {{ p.rounds[1] - p.rounds[0] + 1 }} 轮 · {{ p.volume }}
               </span>
               <span class="phase-bar">
                 <i :style="{ width: phaseProgress(p) }"></i>
@@ -456,6 +491,10 @@ onBeforeUnmount(() => {
 
           <div class="session-note">{{ training.activeSession.value.note }}</div>
 
+          <div v-if="training.recoveryNote.value" class="session-recovery">
+            {{ training.recoveryNote.value }}
+          </div>
+
           <!-- 当前训练与打卡 -->
           <PlanSession
             :session="training.activeSession.value"
@@ -487,6 +526,7 @@ onBeforeUnmount(() => {
                   {{ l.sets }} × {{ l.reps }}
                   <template v-if="l.weight"> · {{ l.weight }} kg</template>
                   · RPE {{ l.rpe }}
+                  <template v-if="training.e1rmFor(l)"> · e1RM {{ training.e1rmFor(l) }} kg</template>
                 </span>
                 <span class="log-tag" :class="{ 'is-plan': !!l.sessionKey }">
                   {{ l.sessionKey ? '计划' : '自由' }}
@@ -574,8 +614,8 @@ onBeforeUnmount(() => {
                 <span>本次 / 计划组数</span>
               </div>
               <div class="stat-cell">
-                <b>{{ training.sessionStats.value.minutes }}<small>min</small></b>
-                <span>估算训练时长</span>
+                <b>{{ training.sessionStats.value.minutes }}<small>/{{ plannedMinutes }}min</small></b>
+                <span>实际 / 预计时长</span>
               </div>
             </div>
 
@@ -596,7 +636,6 @@ onBeforeUnmount(() => {
             :round="training.activeSession.value.round"
             :phase-name="phase.name"
             :goal-zh="goal.zh"
-            :per-week="perWeek"
             :split-days="split.days"
           />
 
@@ -634,6 +673,33 @@ onBeforeUnmount(() => {
                 <i :style="{ background: t.color }"></i>{{ t.label }}
               </span>
             </div>
+          </section>
+
+          <!-- 今日状态自评 -->
+          <section class="plan-card readiness-card">
+            <header class="plan-card-head">
+              <div>
+                <div class="plan-kicker">Readiness · 今日状态</div>
+                <h3 class="plan-card-title">训练前自评</h3>
+              </div>
+              <span class="stats-pct">{{ training.readinessScore.value }}/9</span>
+            </header>
+            <div class="readiness-grid">
+              <div v-for="dim in READINESS_DIMS" :key="dim.key" class="readiness-row">
+                <span>{{ dim.zh }}</span>
+                <div class="readiness-options">
+                  <button
+                    v-for="opt in dim.options"
+                    :key="opt.value"
+                    :class="{ 'is-active': training.readiness.value[dim.key] === opt.value }"
+                    @click="setReadiness(dim.key, opt.value)"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p class="readiness-note">{{ training.readinessAdvice.value }}</p>
           </section>
 
           <!-- 调整建议 -->

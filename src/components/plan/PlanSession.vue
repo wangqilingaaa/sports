@@ -62,6 +62,47 @@ function weightIncrement(exerciseId: string): number {
     : 2.5
 }
 
+function parseRepRange(reps: string): [number, number] {
+  const nums = reps.match(/\d+/g)?.map(Number) ?? []
+  if (!nums.length) return [8, 12]
+  return [nums[0], nums[1] ?? nums[0]]
+}
+
+function parseRpeMax(rpe: string): number {
+  const nums = rpe.match(/\d+/g)?.map(Number) ?? []
+  return nums.length ? nums[nums.length - 1] : 8
+}
+
+/** 双进阶：达到次数上限且 RPE 不超标就加负荷；否则保持或回退 */
+function nextLoadHint(item: PlannedExercise): string {
+  const last = training.lastLogFor(item.exerciseId)
+  if (!last) return ''
+  const [minReps, maxReps] = parseRepRange(item.prescription.reps)
+  const rpeMax = parseRpeMax(item.prescription.rpe)
+  const bodyweight = BODYWEIGHT_EQUIPMENT.has(exerciseOf(item)?.equipment ?? '')
+  const hitTop = last.reps >= maxReps && last.rpe <= rpeMax
+  const tooHard = last.reps < minReps || last.rpe > rpeMax + 0.5
+
+  if (bodyweight || last.weight <= 0) {
+    if (hitTop) return '下次：加 1–2 次'
+    if (tooHard) return '下次：降 1 档 / 减 1 次'
+    return '下次：保持'
+  }
+
+  const increment = weightIncrement(item.exerciseId)
+  if (hitTop) {
+    if (ASSISTED_EXERCISES.has(item.exerciseId)) {
+      return `下次：减辅助 ${Math.abs(increment)}kg`
+    }
+    return `下次：+${increment}kg（约 ${Math.round((last.weight + increment) * 2) / 2}kg）`
+  }
+  if (tooHard) {
+    const target = Math.round(last.weight * 0.925 * 2) / 2
+    return `下次：减 5–10%（约 ${target}kg）`
+  }
+  return `下次：保持 ${last.weight}kg`
+}
+
 function seedRow(item: PlannedExercise) {
   const saved = training.logFor(sessionIndex.value, item.exerciseId, item.slotKey)
   const last = training.lastLogFor(item.exerciseId)
@@ -216,6 +257,7 @@ function roleLabel(role: PlannedExercise['role']): string {
               <span>休息 {{ item.prescription.rest }}s</span>
               <span class="sx-load">{{ item.prescription.load }}</span>
             </div>
+            <div v-if="nextLoadHint(item)" class="sx-next">{{ nextLoadHint(item) }}</div>
           </div>
         </div>
 
@@ -278,6 +320,11 @@ function roleLabel(role: PlannedExercise['role']): string {
           <button class="sx-log" @click="logRow(item)">打卡</button>
         </div>
       </div>
+    </div>
+
+    <div class="session-cooldown">
+      <span class="session-warmup-tag">冷身</span>
+      {{ day.cooldown }}
     </div>
 
     <footer class="session-foot">

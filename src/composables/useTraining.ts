@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { EXERCISE_MAP } from '@/data/exercises'
+import { MUSCLE_MAP } from '@/data/muscles'
 import {
   buildPlan,
   DAYS_TO_SPLIT,
@@ -69,6 +70,15 @@ export interface SessionStats {
   minutes: number
 }
 
+export interface Readiness {
+  /** 1 = 不足，3 = 充足 */
+  sleep: number
+  /** 1 = 明显，3 = 无 */
+  soreness: number
+  /** 1 = 低，3 = 高 */
+  energy: number
+}
+
 export type VolumeStatus = 'low' | 'ok' | 'high'
 
 export interface VolumeAuditItem {
@@ -78,11 +88,11 @@ export interface VolumeAuditItem {
   min: number
   max: number
   status: VolumeStatus
-  /** 按当前每周频率折算后的组数 */
-  weeklySets: number
-  weeklyMin: number
-  weeklyMax: number
-  weeklyStatus: VolumeStatus
+  /** 当前轮已打卡的全部直接组 */
+  actualSets: number
+  /** 当前轮 RPE 达到硬组阈值的直接组 */
+  hardSets: number
+  hardStatus: VolumeStatus
 }
 
 const STORAGE_KEY = 'atlas.training.v1'
@@ -121,8 +131,8 @@ function defaultConfig(): PlanConfig {
     goal: 'hypertrophy',
     level: 2,
     split: 'ul',
-    perWeek: 4,
     cycle: 1,
+    compact: false,
   }
 }
 
@@ -135,6 +145,7 @@ const config = ref<PlanConfig>(defaultConfig())
 const logs = ref<LogEntry[]>([])
 /** 用户自己换过的动作位；计划本身仍由配置推导，这里是覆盖层 */
 const swaps = ref<PlanSwaps>({})
+const readiness = ref<Readiness>({ sleep: 2, soreness: 2, energy: 2 })
 
 /** 换动作必须保持复合/孤立属性并共享主动肌；防止老存档把主项换成孤立动作 */
 function swapCompatible(currentId: string, nextId: string): boolean {
@@ -255,6 +266,7 @@ function hydrate() {
       config?: Record<string, unknown>
       logs?: unknown[]
       swaps?: unknown
+      readiness?: unknown
     }
     const c = parsed.config
     let legacyStart: string | null = null
@@ -274,13 +286,10 @@ function hydrate() {
         config.value.split = c.split as SplitId
         legacyDays = SPLIT_MAP.get(config.value.split)?.days ?? legacyDays
       }
-      config.value.perWeek =
-        typeof c.perWeek === 'number' && VALID_DAYS.includes(c.perWeek as DaysPerWeek)
-          ? (c.perWeek as DaysPerWeek)
-          : legacyDays
       if (typeof c.cycle === 'number' && c.cycle >= 1) {
         config.value.cycle = Math.trunc(c.cycle)
       }
+      config.value.compact = typeof c.compact === 'boolean' ? c.compact : false
       if (typeof c.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.startDate)) {
         legacyStart = c.startDate
       }
@@ -293,6 +302,15 @@ function hydrate() {
       )
     }
     swaps.value = normalizeSwaps(parsed.swaps)
+    if (parsed.readiness && typeof parsed.readiness === 'object') {
+      const rawReadiness = parsed.readiness as Record<string, unknown>
+      for (const key of ['sleep', 'soreness', 'energy'] as const) {
+        const value = rawReadiness[key]
+        if (typeof value === 'number' && value >= 1 && value <= 3) {
+          readiness.value[key] = Math.round(value)
+        }
+      }
+    }
   } catch {
     /* 存档不可用时按默认计划运行 */
   }
@@ -302,7 +320,12 @@ function persist() {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ config: config.value, logs: logs.value, swaps: swaps.value }),
+      JSON.stringify({
+        config: config.value,
+        logs: logs.value,
+        swaps: swaps.value,
+        readiness: readiness.value,
+      }),
     )
   } catch {
     /* 隐私模式或配额不足时静默失败 */
@@ -311,7 +334,7 @@ function persist() {
 
 hydrate()
 persist()
-watch([config, logs, swaps], persist, { deep: true })
+watch([config, logs, swaps, readiness], persist, { deep: true })
 
 const selectedIndex = ref(1)
 const heatRange = ref<HeatRange>('session')
@@ -319,9 +342,6 @@ const heatRange = ref<HeatRange>('session')
 const plan = computed(() => buildPlan(config.value, swaps.value))
 const totalSessions = computed(() => plan.value.length)
 const activeSplit = computed(() => SPLIT_MAP.get(config.value.split) ?? SPLITS[0])
-/** 一轮需要的周数；每周训练次数不等于分化天数时用来做时间换算 */
-const weeksPerRound = computed(() => activeSplit.value.days / config.value.perWeek)
-const planWeeks = computed(() => totalSessions.value / config.value.perWeek)
 const activeSession = computed(() => plan.value[selectedIndex.value - 1] ?? plan.value[0])
 const activeDay = computed(() => activeSession.value.day)
 
@@ -379,8 +399,13 @@ function sessionDone(index: number): boolean {
   return doneIndexes.value.has(index)
 }
 
-function logsForSession(index: number): LogEntry[] {
-  return logs.value.filter((l) => l.cycle === config.value.cycle && l.sessionIndex === index)
+function logsForSession(index: number, sessionKey?: string): LogEntry[] {
+  return logs.value.filter(
+    (l) =>
+      l.cycle === config.value.cycle &&
+      l.sessionIndex === index &&
+      (!sessionKey || !l.sessionKey || l.sessionKey === sessionKey),
+  )
 }
 
 function logFor(index: number, exerciseId: string, slotKey?: string): LogEntry | null {
@@ -404,6 +429,12 @@ function lastLogFor(exerciseId: string): LogEntry | null {
     if (!latest || l.createdAt > latest.createdAt) latest = l
   }
   return latest
+}
+
+/** Epley 公式估算 1RM；自重/未填重量返回 null */
+function e1rmFor(log: LogEntry): number | null {
+  if (log.weight <= 0) return null
+  return Math.round(log.weight * (1 + log.reps / 30) * 10) / 10
 }
 
 function upsertLog(input: LogInput) {
@@ -471,11 +502,17 @@ const heatIndexes = computed(() => {
 const heatLogs = computed(() => {
   const range = heatIndexes.value
   if (!range) return logs.value
+  const keys = new Map<number, string>()
+  for (let i = range.from; i <= range.to; i++) {
+    const session = plan.value[i - 1]
+    if (session) keys.set(i, session.day.key)
+  }
   return logs.value.filter(
     (l) =>
       l.cycle === config.value.cycle &&
       l.sessionIndex >= range.from &&
-      l.sessionIndex <= range.to,
+      l.sessionIndex <= range.to &&
+      (!l.sessionKey || !keys.has(l.sessionIndex) || l.sessionKey === keys.get(l.sessionIndex)),
   )
 })
 
@@ -520,7 +557,10 @@ const trainedMuscleCount = computed(() => heatDetail.value.filter((m) => m.sets 
 
 const sessionStats = computed<SessionStats>(() => {
   const list = logs.value.filter(
-    (l) => l.cycle === config.value.cycle && l.sessionIndex === selectedIndex.value,
+    (l) =>
+      l.cycle === config.value.cycle &&
+      l.sessionIndex === selectedIndex.value &&
+      (!l.sessionKey || l.sessionKey === activeDay.value.key),
   )
   let sets = 0
   let volume = 0
@@ -550,16 +590,19 @@ const volumeAudit = computed<VolumeAuditItem[]>(() => {
   const phaseLevelScale =
     PHASE_VOLUME_SCALE[phase.id] * LEVEL_VOLUME_SCALE[config.value.level]
   const roundScale = phaseLevelScale * SPLIT_VOLUME_SCALE[config.value.split]
-  // 一轮不一定等于一周；按实际频率折算后，才能和每周容量指南比较
-  const weeklyScale = config.value.perWeek / activeSplit.value.days
   const targets = VOLUME_TARGETS[config.value.goal]
   const sessions = plan.value.filter((session) => session.round === activeSession.value.round)
   const totals = new Map<string, number>()
 
+  const conditioningSlots = new Set<string>()
+
   for (const session of sessions) {
     for (const item of session.day.exercises) {
       // 代谢收尾不计入力量容量，避免把摆荡类动作算成臀部/腘绳组数
-      if (item.role === 'conditioning') continue
+      if (item.role === 'conditioning') {
+        conditioningSlots.add(item.slotKey)
+        continue
+      }
       const exercise = EXERCISE_MAP.get(item.exerciseId)
       if (!exercise) continue
       for (const group of VOLUME_GROUP_DEFS) {
@@ -575,18 +618,40 @@ const volumeAudit = computed<VolumeAuditItem[]>(() => {
     }
   }
 
+  // 实际硬组：当前轮已打卡、RPE 达到阈值（适应期 ≥6，其余 ≥7）的直接组
+  const roundIndexes = new Set(sessions.map((session) => session.index))
+  const actualTotals = new Map<string, number>()
+  const hardTotals = new Map<string, number>()
+  const hardThreshold = phase.id === 'adaptation' ? 6 : 7
+  for (const log of logs.value) {
+    if (log.cycle !== config.value.cycle) continue
+    if (!roundIndexes.has(log.sessionIndex)) continue
+    if (log.slotKey && conditioningSlots.has(log.slotKey)) continue
+    const exercise = EXERCISE_MAP.get(log.exerciseId)
+    if (!exercise) continue
+    for (const group of VOLUME_GROUP_DEFS) {
+      let credit = 0
+      for (const hit of exercise.muscles) {
+        if (!group.members.includes(hit.id)) continue
+        credit = Math.max(credit, muscleCredit(hit.role))
+      }
+      if (credit <= 0) continue
+      actualTotals.set(group.id, (actualTotals.get(group.id) ?? 0) + log.sets * credit)
+      if (log.rpe >= hardThreshold) {
+        hardTotals.set(group.id, (hardTotals.get(group.id) ?? 0) + log.sets * credit)
+      }
+    }
+  }
+
   return VOLUME_GROUP_DEFS.map((group) => {
     const sets = Math.round((totals.get(group.id) ?? 0) * 10) / 10
-    const weeklySets = Math.round(sets * weeklyScale * 10) / 10
+    const actualSets = Math.round((actualTotals.get(group.id) ?? 0) * 10) / 10
+    const hardSets = Math.round((hardTotals.get(group.id) ?? 0) * 10) / 10
     const [minRaw, maxRaw] = targets[group.type]
     const min = Math.max(1, Math.floor(minRaw * roundScale))
     const max = Math.max(min, Math.ceil(maxRaw * roundScale))
-    // 每周参考区间不乘分化系数：分化只影响一轮的训练日数，不影响每周指南
-    const weeklyMin = Math.max(1, Math.floor(minRaw * phaseLevelScale))
-    const weeklyMax = Math.max(weeklyMin, Math.ceil(maxRaw * phaseLevelScale))
     const status: VolumeStatus = sets < min ? 'low' : sets > max ? 'high' : 'ok'
-    const weeklyStatus: VolumeStatus =
-      weeklySets < weeklyMin ? 'low' : weeklySets > weeklyMax ? 'high' : 'ok'
+    const hardStatus: VolumeStatus = hardSets < min ? 'low' : hardSets > max ? 'high' : 'ok'
     return {
       id: group.id,
       zh: group.zh,
@@ -594,10 +659,9 @@ const volumeAudit = computed<VolumeAuditItem[]>(() => {
       min,
       max,
       status,
-      weeklySets,
-      weeklyMin,
-      weeklyMax,
-      weeklyStatus,
+      actualSets,
+      hardSets,
+      hardStatus,
     }
   })
 })
@@ -674,13 +738,65 @@ const deloadAdvice = computed(() => {
   return { due: false, reason: '' }
 })
 
-function setConfig(patch: Partial<PlanConfig>) {
-  const next = { ...config.value, ...patch }
-  // 换分化时默认回到该分化的自然频率，用户仍可再手动调整
-  if (patch.split && patch.perWeek === undefined) {
-    next.perWeek = SPLIT_MAP.get(next.split)?.days ?? next.perWeek
+/** 本次训练日的主要肌群如果 48 小时内刚练过，给出恢复间隔提醒 */
+const recoveryNote = computed(() => {
+  const activePrimary = new Set<MuscleId>()
+  for (const item of activeDay.value.exercises) {
+    const exercise = EXERCISE_MAP.get(item.exerciseId)
+    for (const hit of exercise?.muscles ?? []) {
+      if (hit.role === 'primary') activePrimary.add(hit.id)
+    }
   }
-  config.value = next
+  if (!activePrimary.size) return ''
+
+  let latest: { createdAt: number; muscleId: MuscleId } | null = null
+  for (const log of logs.value) {
+    if (log.cycle !== config.value.cycle) continue
+    if (log.sessionIndex === activeSession.value.index && log.sessionKey === activeDay.value.key) {
+      continue
+    }
+    const exercise = EXERCISE_MAP.get(log.exerciseId)
+    if (!exercise) continue
+    const hit = exercise.muscles.find(
+      (entry) => entry.role === 'primary' && activePrimary.has(entry.id),
+    )
+    if (!hit) continue
+    if (!latest || log.createdAt > latest.createdAt) {
+      latest = { createdAt: log.createdAt, muscleId: hit.id }
+    }
+  }
+  if (!latest) return ''
+
+  const hours = (Date.now() - latest.createdAt) / 3_600_000
+  if (hours >= 48) return ''
+  const name = MUSCLE_MAP.get(latest.muscleId)?.zh ?? '同一肌群'
+  return `距上次训练${name}约 ${hours < 1 ? '不到 1' : Math.round(hours)} 小时；同一肌群建议间隔 ≥48 小时，今天可减 1–2 组或换部位。`
+})
+
+const readinessScore = computed(
+  () => readiness.value.sleep + readiness.value.soreness + readiness.value.energy,
+)
+
+const readinessAdvice = computed(() => {
+  if (readinessScore.value <= 4) {
+    return '状态偏低：主项减 1 组、RPE 上限 8，不做顶层组；今天以完成动作为主。'
+  }
+  if (readinessScore.value >= 8) {
+    return '状态良好：按计划执行，主项最后一组可留 1 次余力。'
+  }
+  return '状态一般：按计划执行；如果主项 RPE 超过目标，减 1 组或降 5%。'
+})
+
+function setReadiness(patch: Partial<Readiness>) {
+  const next = { ...readiness.value, ...patch }
+  for (const key of ['sleep', 'soreness', 'energy'] as const) {
+    next[key] = Math.min(3, Math.max(1, Math.round(next[key])))
+  }
+  readiness.value = next
+}
+
+function setConfig(patch: Partial<PlanConfig>) {
+  config.value = { ...config.value, ...patch }
   selectedIndex.value = Math.min(selectedIndex.value, totalSessions.value)
 }
 
@@ -724,8 +840,6 @@ export function useTraining() {
     plan,
     totalSessions,
     activeSplit,
-    weeksPerRound,
-    planWeeks,
     selectedIndex,
     activeSession,
     activeDay,
@@ -740,6 +854,11 @@ export function useTraining() {
     streak,
     recommendation,
     deloadAdvice,
+    recoveryNote,
+    readiness,
+    readinessAdvice,
+    readinessScore,
+    setReadiness,
     nextIndex,
     completedCount,
     allDone,
@@ -747,6 +866,7 @@ export function useTraining() {
     logsForSession,
     logFor,
     lastLogFor,
+    e1rmFor,
     upsertLog,
     removeLog,
     setConfig,

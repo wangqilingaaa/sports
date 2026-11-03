@@ -7,34 +7,37 @@ const props = defineProps<{
   round: number
   phaseName: string
   goalZh: string
-  perWeek: number
   splitDays: number
 }>()
 
-const mode = ref<'round' | 'week'>('round')
+const mode = ref<'round' | 'actual'>('round')
 
-type DisplayItem = Pick<VolumeAuditItem, 'id' | 'zh' | 'sets' | 'min' | 'max' | 'status'>
+type DisplayItem = Pick<VolumeAuditItem, 'id' | 'zh' | 'sets' | 'min' | 'max' | 'status'> & {
+  actualSets?: number
+}
 
 const displayItems = computed<DisplayItem[]>(() =>
-  props.items.map((item) =>
-    mode.value === 'week'
-      ? {
-          id: item.id,
-          zh: item.zh,
-          sets: item.weeklySets,
-          min: item.weeklyMin,
-          max: item.weeklyMax,
-          status: item.weeklyStatus,
-        }
-      : {
-          id: item.id,
-          zh: item.zh,
-          sets: item.sets,
-          min: item.min,
-          max: item.max,
-          status: item.status,
-        },
-  ),
+  props.items.map((item) => {
+    if (mode.value === 'actual') {
+      return {
+        id: item.id,
+        zh: item.zh,
+        sets: item.hardSets,
+        min: item.min,
+        max: item.max,
+        status: item.hardStatus,
+        actualSets: item.actualSets,
+      }
+    }
+    return {
+      id: item.id,
+      zh: item.zh,
+      sets: item.sets,
+      min: item.min,
+      max: item.max,
+      status: item.status,
+    }
+  }),
 )
 
 const scaleMax = computed(
@@ -60,20 +63,30 @@ function targetWidth(item: DisplayItem): number {
       <div>
         <div class="plan-kicker">Volume · 容量审计</div>
         <h3 class="plan-card-title">
-          {{ mode === 'round' ? `第 ${round} 轮` : '按周折算' }} · 每肌群直接组
+          {{ mode === 'round' ? `第 ${round} 轮` : '实际硬组' }} · 每肌群直接组
         </h3>
       </div>
       <div class="audit-head-side">
         <span class="audit-phase">{{ goalZh }} · {{ phaseName }}</span>
         <div class="audit-mode">
           <button :class="{ 'is-active': mode === 'round' }" @click="mode = 'round'">按轮</button>
-          <button :class="{ 'is-active': mode === 'week' }" @click="mode = 'week'">按周</button>
+          <button :class="{ 'is-active': mode === 'actual' }" @click="mode = 'actual'">实际</button>
         </div>
       </div>
     </header>
 
     <div class="audit-list">
-      <div v-for="item in displayItems" :key="item.id" class="audit-row" :data-status="item.status">
+      <div
+        v-for="item in displayItems"
+        :key="item.id"
+        class="audit-row"
+        :data-status="item.status"
+        :title="
+          item.actualSets !== undefined
+            ? `实际打卡 ${item.actualSets} 组，其中硬组 ${item.sets} 组`
+            : undefined
+        "
+      >
         <span class="audit-name">{{ item.zh }}</span>
         <span class="audit-track">
           <i
@@ -97,8 +110,8 @@ function targetWidth(item: DisplayItem): number {
         按轮：当前循环 {{ splitDays }} 练的处方总量；区间已按分期、水平与分化折算。
       </template>
       <template v-else>
-        按周：每轮组数 × 每周 {{ perWeek }} 练 ÷ 每轮 {{ splitDays }} 练；区间按分期与水平折算，
-        不乘分化系数。
+        实际硬组：当前轮已打卡且 RPE 达到阈值的直接组（适应期 ≥6，其余 ≥7）；柱状为硬组，
+        悬停可看全部打卡组数。
       </template>
       直接组 = 主动肌 1 组 + 协同肌 0.5 组，同一动作对同一肌群只计一次；
       肩前多由推类动作间接覆盖，不单列。

@@ -32,10 +32,10 @@ export interface PlanConfig {
   goal: GoalId
   level: Level
   split: SplitId
-  /** 每周实际训练次数；只用于容量折算与减载提醒，不改变训练序列 */
-  perWeek: DaysPerWeek
   /** 当前周期，从 1 开始；换周期只重置完成度，不清空历史记录 */
   cycle: number
+  /** 全身分化精简版：去掉全身日最后 2 个孤立动作 */
+  compact: boolean
 }
 
 export interface Goal {
@@ -44,6 +44,10 @@ export interface Goal {
   en: string
   desc: string
   badge: string
+  /** 该目标优先推荐的分化 */
+  recommendedSplits: SplitId[]
+  /** 目标与分化的搭配说明 */
+  splitNote: string
 }
 
 export interface Phase {
@@ -89,6 +93,7 @@ export interface PlanDay {
   en: string
   focus: string
   warmup: string
+  cooldown: string
   exercises: PlannedExercise[]
 }
 
@@ -165,6 +170,8 @@ export const GOALS: Goal[] = [
     en: 'Hypertrophy',
     desc: '中等负荷叠加中高容量，主项 6–10 次、孤立 12–20 次，强调离心控制与全程幅度。',
     badge: '6–20 次/组',
+    recommendedSplits: ['ul', 'hybrid', 'ppl2'],
+    splitNote: '增肌优先每肌群每周 2 次暴露：上下肢、五分化、推拉腿×2 更稳；推拉腿单轮只有 1 次暴露。',
   },
   {
     id: 'strength',
@@ -172,13 +179,17 @@ export const GOALS: Goal[] = [
     en: 'Max Strength',
     desc: '低次数高强度，主项 3–6 次、组间充分休息，用更高张力换取神经适应；建议配合全身或上下肢分化，让主项每轮暴露两次。',
     badge: '3–6 次/组',
+    recommendedSplits: ['full', 'ul'],
+    splitNote: '力量目标优先全身/上下肢，让主项每轮暴露两次；其他分化主项仍为 1 次/轮。',
   },
   {
     id: 'recondition',
     zh: '减脂体能',
     en: 'Reconditioning',
-    desc: '高次数短间歇，配合摆荡/农夫行走循环收尾，兼顾热量消耗与心肺能力。',
+    desc: '高次数短间歇，配合壶铃摆荡循环收尾；每周再安排 150 分钟中等强度有氧或 8–10k 步。',
     badge: '12–20 次/组',
+    recommendedSplits: ['full', 'ul', 'ppl'],
+    splitNote: '减脂体能优先全身/上下肢，配合每周 150 分钟有氧；不必追求高分化。',
   },
 ]
 
@@ -221,6 +232,19 @@ export const PHASES: Phase[] = [
   },
 ]
 
+/** 同一套分期，按水平调整各阶段轮数；总轮数仍为 8 */
+const PHASE_ROUNDS_BY_LEVEL: Record<Level, Record<PhaseId, [number, number]>> = {
+  1: { adaptation: [1, 3], volume: [4, 6], intensity: [7, 7], deload: [8, 8] },
+  2: { adaptation: [1, 2], volume: [3, 5], intensity: [6, 7], deload: [8, 8] },
+  3: { adaptation: [1, 1], volume: [2, 5], intensity: [6, 7], deload: [8, 8] },
+}
+
+/** 按水平取分期；入门适应期更长，高阶直接进入容量期 */
+export function phasesFor(level: Level): Phase[] {
+  const rounds = PHASE_ROUNDS_BY_LEVEL[level]
+  return PHASES.map((phase) => ({ ...phase, rounds: rounds[phase.id] }))
+}
+
 interface SlotTemplate {
   role: RoleId
   label: string
@@ -240,6 +264,16 @@ interface DayTemplate {
 const WARMUP_UPPER = '热身 8 分钟：快走/划船 + 弹力带肩胛激活 + 主项 2 组递增组'
 const WARMUP_LOWER = '热身 10 分钟：单车 + 髋踝活动 + 主项 2 组递增组'
 const WARMUP_FULL = '热身 8 分钟：划船 + 全身动态拉伸 + 主项 2 组递增组'
+
+const COOLDOWN_UPPER = '冷身 5 分钟：慢走降心率 + 胸/肩前侧拉伸，每侧 30 秒'
+const COOLDOWN_LOWER = '冷身 5 分钟：慢走降心率 + 髋屈肌/腘绳肌拉伸，每侧 30 秒'
+const COOLDOWN_FULL = '冷身 5 分钟：慢走降心率 + 全身静态拉伸'
+
+function cooldownFor(warmup: string): string {
+  if (warmup === WARMUP_UPPER) return COOLDOWN_UPPER
+  if (warmup === WARMUP_LOWER) return COOLDOWN_LOWER
+  return COOLDOWN_FULL
+}
 
 const PUSH_A: DayTemplate = {
   key: 'push-a',
@@ -347,7 +381,7 @@ const PPL3_PUSH: DayTemplate = {
     { role: 'accessory', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
     { role: 'accessory', label: '胸孤立', pool: ['cable-crossover', 'dumbbell-fly', 'pec-deck'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'cable-lateral-raise', 'lateral-raise'] },
-    { role: 'accessory', label: '三角肌中束', pool: ['lateral-raise', 'machine-lateral-raise', 'cable-lateral-raise'] },
+    { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
     { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'overhead-cable-ext', 'skull-crusher'] },
     { role: 'accessory', label: '肱三头', pool: ['dumbbell-overhead-tricep-extension', 'dip', 'triceps-pushdown'] },
     { role: 'core', label: '核心', pool: ['plank', 'dead-bug', 'ab-wheel-rollout'] },
@@ -380,7 +414,7 @@ const PPL3_LEGS: DayTemplate = {
   warmup: WARMUP_LOWER,
   slots: [
     { role: 'main', label: '深蹲', pool: ['goblet-squat', 'barbell-squat', 'front-squat'] },
-    { role: 'secondary', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
+    { role: 'main', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
     { role: 'accessory', label: '单腿', pool: ['step-up', 'bulgarian-split-squat', 'barbell-lunge'] },
     { role: 'accessory', label: '腿举', pool: ['leg-press', 'hack-squat', 'smith-squat'] },
     { role: 'accessory', label: '腘绳肌', pool: ['leg-curl', 'seated-leg-curl', 'nordic-curl'] },
@@ -401,7 +435,7 @@ const UPPER_A: DayTemplate = {
     { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
     { role: 'secondary', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
-    { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'overhead-cable-ext', 'skull-crusher'] },
+    { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
     { role: 'accessory', label: '肱二头', pool: ['cable-curl', 'barbell-curl', 'incline-dumbbell-curl'] },
     { role: 'core', label: '核心', pool: ['plank', 'dead-bug', 'ab-wheel-rollout'] },
   ],
@@ -466,9 +500,9 @@ const FULL_A: DayTemplate = {
     { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
     { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
     { role: 'accessory', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
-    { role: 'accessory', label: '胸孤立', pool: ['cable-crossover', 'dumbbell-fly', 'pec-deck'] },
+    { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
-    { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'overhead-cable-ext', 'skull-crusher'] },
+    { role: 'accessory', label: '胸孤立', pool: ['cable-crossover', 'dumbbell-fly', 'pec-deck'] },
     { role: 'accessory', label: '小腿', pool: ['machine-calf-raise', 'seated-calf-raise', 'donkey-calf-raise'] },
     { role: 'core', label: '核心', pool: ['plank', 'dead-bug', 'hanging-knee-raise'] },
   ],
@@ -487,7 +521,7 @@ const FULL_B: DayTemplate = {
     { role: 'secondary', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
     { role: 'accessory', label: '单腿', pool: ['step-up', 'bulgarian-split-squat', 'barbell-lunge'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
-    { role: 'accessory', label: '肱二头', pool: ['cable-curl', 'barbell-curl', 'incline-dumbbell-curl'] },
+    { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
     { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'dumbbell-overhead-tricep-extension', 'dip'] },
     { role: 'accessory', label: '小腿', pool: ['seated-calf-raise', 'smith-calf-raise', 'donkey-calf-raise'] },
     { role: 'core', label: '核心', pool: ['side-plank', 'cable-crunch', 'hanging-leg-raise'] },
@@ -632,8 +666,23 @@ const ROLE_NOTE: Record<RoleId, string> = {
   conditioning: '代谢收尾 · 动作间不歇，组间休息 30 秒',
 }
 
-export function phaseOf(round: number): Phase {
-  return PHASES.find((p) => round >= p.rounds[0] && round <= p.rounds[1]) ?? PHASES[0]
+export function phaseOf(round: number, level: Level = 2): Phase {
+  const phases = phasesFor(level)
+  return phases.find((p) => round >= p.rounds[0] && round <= p.rounds[1]) ?? phases[0]
+}
+
+function noteFor(phase: Phase, round: number): string {
+  const within = round - phase.rounds[0]
+  switch (phase.id) {
+    case 'adaptation':
+      return ROUND_NOTES[Math.min(within, 1)]
+    case 'volume':
+      return ROUND_NOTES[2 + Math.min(within, 2)]
+    case 'intensity':
+      return ROUND_NOTES[5 + Math.min(within, 1)]
+    default:
+      return ROUND_NOTES[7]
+  }
 }
 
 const SETS_BY_PHASE: Record<PhaseId, Record<RoleId, number>> = {
@@ -808,7 +857,7 @@ export function buildSession(
   const total = PLAN_ROUNDS * split.days
   const safeIndex = Math.min(total, Math.max(1, Math.trunc(index)))
   const round = Math.ceil(safeIndex / split.days)
-  const phase = phaseOf(round)
+  const phase = phaseOf(round, config.level)
   const templates =
     (config.goal === 'strength' ? STRENGTH_TEMPLATES[split.id] : undefined) ??
     SPLIT_TEMPLATES[split.id]
@@ -818,6 +867,22 @@ export function buildSession(
       ? { role: 'conditioning' as const, label: '代谢收尾', pool: ['kettlebell-swing'] }
       : null
   const slots = conditioning ? [...tpl.slots, conditioning] : tpl.slots
+  const indexedSlots = slots.map((slot, slotIndex) => ({ slot, slotIndex }))
+  let keptSlots = indexedSlots
+  if (config.compact && split.id === 'full') {
+    // 保留原始 slotIndex，避免精简后后续动作位的打卡记录错位
+    let remaining = 2
+    keptSlots = [...indexedSlots]
+      .reverse()
+      .filter(({ slot }) => {
+        if (remaining > 0 && slot.role === 'accessory') {
+          remaining -= 1
+          return false
+        }
+        return true
+      })
+      .reverse()
+  }
 
   const day: PlanDay = {
     key: tpl.key,
@@ -825,7 +890,8 @@ export function buildSession(
     en: tpl.en,
     focus: tpl.focus,
     warmup: tpl.warmup,
-    exercises: slots.map((slot, slotIndex) => {
+    cooldown: cooldownFor(tpl.warmup),
+    exercises: keptSlots.map(({ slot, slotIndex }) => {
       const slotKey = `${tpl.key}:${slotIndex}`
       const exerciseId =
         swaps[slotKey] || slot.pool[Math.min(config.level - 1, slot.pool.length - 1)]
@@ -848,7 +914,7 @@ export function buildSession(
     }),
   }
 
-  return { index: safeIndex, round, phase, day, note: ROUND_NOTES[round - 1] ?? '' }
+  return { index: safeIndex, round, phase, day, note: noteFor(phase, round) }
 }
 
 /** 全程训练序列：PLAN_ROUNDS × 每个循环的训练次数 */
@@ -859,7 +925,14 @@ export function buildPlan(config: PlanConfig, swaps: PlanSwaps = {}): PlanSessio
   )
 }
 
-export type VolumeGroupType = 'large' | 'posterior' | 'medium' | 'small' | 'core'
+export type VolumeGroupType =
+  | 'large'
+  | 'posterior'
+  | 'medium'
+  | 'small'
+  | 'core'
+  | 'rear-delt'
+  | 'hamstring'
 
 export interface VolumeGroupDef {
   id: string
@@ -874,16 +947,28 @@ export const VOLUME_GROUP_DEFS: VolumeGroupDef[] = [
   { id: 'lats', zh: '背阔', type: 'large', members: ['latissimus-dorsi', 'teres-major'] },
   {
     id: 'upper-back',
-    zh: '上背/后束',
+    zh: '上背',
     type: 'medium',
-    members: ['rhomboids', 'trapezius', 'deltoid-posterior'],
+    members: ['rhomboids', 'trapezius'],
+  },
+  {
+    id: 'rear-delts',
+    zh: '后束',
+    type: 'rear-delt',
+    members: ['deltoid-posterior'],
   },
   { id: 'quads', zh: '股四头', type: 'large', members: ['quadriceps'] },
   {
-    id: 'glutes-hams',
-    zh: '臀/腘绳',
+    id: 'glutes',
+    zh: '臀',
     type: 'posterior',
-    members: ['gluteus-maximus', 'gluteus-medius', 'hamstrings'],
+    members: ['gluteus-maximus', 'gluteus-medius'],
+  },
+  {
+    id: 'hamstrings',
+    zh: '腘绳',
+    type: 'hamstring',
+    members: ['hamstrings'],
   },
   { id: 'side-delts', zh: '肩中', type: 'small', members: ['deltoid-lateral'] },
   { id: 'biceps', zh: '二头', type: 'small', members: ['biceps-brachii', 'brachialis'] },
@@ -899,11 +984,13 @@ export const VOLUME_GROUP_DEFS: VolumeGroupDef[] = [
 
 /** 每轮直接组参考区间；目标差异体现在次数、负荷与休息，不在组数区间 */
 const BASE_VOLUME_TARGETS: Record<VolumeGroupType, [number, number]> = {
-  large: [9, 26],
-  posterior: [10, 26],
-  medium: [10, 30],
-  small: [7, 18],
-  core: [6, 20],
+  large: [10, 22],
+  posterior: [10, 22],
+  medium: [10, 24],
+  small: [7, 16],
+  core: [6, 18],
+  'rear-delt': [5, 14],
+  hamstring: [8, 18],
 }
 
 export const VOLUME_TARGETS: Record<GoalId, Record<VolumeGroupType, [number, number]>> = {

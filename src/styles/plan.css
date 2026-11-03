@@ -186,6 +186,16 @@
   color: var(--ink-4);
 }
 
+.pchip-rec {
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: var(--teal);
+}
+
+.pchip.is-active .pchip-rec {
+  color: rgba(253, 248, 240, 0.78);
+}
+
 .pchip:hover {
   border-color: var(--line-2);
 }
@@ -222,6 +232,10 @@
 
 .split-note.is-warn {
   color: var(--accent);
+}
+
+.split-note.is-cardio {
+  color: var(--teal);
 }
 
 .deload-banner {
@@ -573,6 +587,17 @@
   color: var(--ink-3);
 }
 
+.session-recovery {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--card-2);
+  font-size: 9.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+
 /* ───────────── 卡片通用 ───────────── */
 .plan-card {
   background: var(--card);
@@ -678,6 +703,17 @@
   font-size: 8.5px;
   letter-spacing: 0.1em;
   color: var(--amber);
+}
+
+.session-cooldown {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--ink-3);
 }
 
 .session-list {
@@ -846,6 +882,13 @@
 
 .sx-load {
   color: var(--ink-4);
+}
+
+.sx-next {
+  margin-top: 3px;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--teal);
 }
 
 .sx-form {
@@ -1505,6 +1548,58 @@
 .audit-mode button.is-active {
   background: var(--accent);
   color: #fdf8f0;
+}
+
+.readiness-grid {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px 4px;
+}
+
+.readiness-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.readiness-row > span {
+  flex: 0 0 34px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+}
+
+.readiness-options {
+  display: flex;
+  gap: 3px;
+}
+
+.readiness-options button {
+  padding: 3px 7px;
+  font-size: 8.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  transition: color 0.16s, background 0.16s, border-color 0.16s;
+}
+
+.readiness-options button:hover {
+  color: var(--ink);
+}
+
+.readiness-options button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fdf8f0;
+}
+
+.readiness-note {
+  margin: 0;
+  padding: 8px 14px 14px;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--ink-3);
 }
 
 .audit-list {
