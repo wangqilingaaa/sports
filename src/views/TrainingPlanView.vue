@@ -58,7 +58,7 @@ const totalExercises = computed(() => activeDay.value.exercises.length)
 const doneExercises = computed(
   () =>
     activeDay.value.exercises.filter(
-      (item) => !!training.logFor(training.selectedIndex.value, item.exerciseId),
+      (item) => !!training.logFor(training.selectedIndex.value, item.exerciseId, item.slotKey),
     ).length,
 )
 const completionPct = computed(() =>

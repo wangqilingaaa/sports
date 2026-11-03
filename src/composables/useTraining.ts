@@ -7,6 +7,7 @@ import {
   PHASE_VOLUME_SCALE,
   PLAN_ROUNDS,
   SPLIT_MAP,
+  SPLIT_VOLUME_SCALE,
   SPLITS,
   VOLUME_GROUP_DEFS,
   VOLUME_TARGETS,
@@ -26,6 +27,8 @@ export interface LogEntry {
   /** 全程第几次训练，从 1 开始 */
   sessionIndex: number
   exerciseId: string
+  /** 计划动作位；自由打卡为空。用于区分同一天重复动作，兼容旧记录 */
+  slotKey?: string
   sets: number
   reps: number
   /** 负重 kg；自重动作记 0 */
@@ -50,6 +53,7 @@ export interface MuscleLoad {
 export interface LogInput {
   sessionIndex: number
   exerciseId: string
+  slotKey?: string
   sets: number
   reps: number
   weight: number
@@ -95,6 +99,7 @@ interface LegacyLog {
   date?: unknown
   sessionIndex?: unknown
   exerciseId?: unknown
+  slotKey?: unknown
   sets?: unknown
   reps?: unknown
   weight?: unknown
@@ -177,6 +182,7 @@ function normalizeLog(
     id: raw.id,
     sessionIndex: Math.min(total, Math.max(1, Math.round(index))),
     exerciseId: raw.exerciseId,
+    slotKey: typeof raw.slotKey === 'string' ? raw.slotKey : undefined,
     sets: raw.sets,
     reps: raw.reps,
     weight: typeof raw.weight === 'number' ? raw.weight : 0,
@@ -186,18 +192,22 @@ function normalizeLog(
   }
 }
 
-/** 同一次训练的同个动作只保留一条记录，优先保留带计划标记的最新记录 */
+/** 同一次训练的同个动作位只保留一条记录，优先保留带计划标记的最新记录 */
 function dedupeLogs(list: LogEntry[]): LogEntry[] {
   const map = new Map<string, LogEntry>()
   for (const log of list) {
-    const key = `${log.sessionIndex}:${log.exerciseId}`
+    const key = `${log.sessionIndex}:${log.slotKey ?? log.exerciseId}`
     const prev = map.get(key)
     if (!prev) {
       map.set(key, log)
       continue
     }
     const next = log.createdAt >= prev.createdAt ? log : prev
-    map.set(key, { ...next, sessionKey: next.sessionKey ?? prev.sessionKey })
+    map.set(key, {
+      ...next,
+      slotKey: next.slotKey ?? prev.slotKey,
+      sessionKey: next.sessionKey ?? prev.sessionKey,
+    })
   }
   return [...map.values()]
 }
@@ -271,12 +281,39 @@ const activeSplit = computed(() => SPLIT_MAP.get(config.value.split) ?? SPLITS[0
 const activeSession = computed(() => plan.value[selectedIndex.value - 1] ?? plan.value[0])
 const activeDay = computed(() => activeSession.value.day)
 
-/** 已完成的训练次序：该次训练存在带计划标记的打卡即视为完成 */
+/** 一次训练至少完成 80% 的动作位才算完成，避免只记一个动作就推进 */
+const SESSION_COMPLETION_RATIO = 0.8
+
+/** 已完成的训练次序：计划动作位覆盖率达到阈值，且 sessionKey 属于当前分化的训练日 */
 const doneIndexes = computed(() => {
   const set = new Set<number>()
+  const loggedBySession = new Map<
+    number,
+    { slotKeys: Set<string>; exerciseIds: Set<string> }
+  >()
+
   for (const log of logs.value) {
-    if (log.sessionKey && log.sessionIndex <= totalSessions.value) set.add(log.sessionIndex)
+    if (!log.sessionKey || log.sessionIndex > totalSessions.value) continue
+    const session = plan.value[log.sessionIndex - 1]
+    if (!session || session.day.key !== log.sessionKey) continue
+    const logged = loggedBySession.get(log.sessionIndex) ?? {
+      slotKeys: new Set<string>(),
+      exerciseIds: new Set<string>(),
+    }
+    if (log.slotKey) logged.slotKeys.add(log.slotKey)
+    else logged.exerciseIds.add(log.exerciseId)
+    loggedBySession.set(log.sessionIndex, logged)
   }
+
+  for (const [index, logged] of loggedBySession) {
+    const session = plan.value[index - 1]
+    if (!session || !session.day.exercises.length) continue
+    const covered = session.day.exercises.filter(
+      (item) => logged.slotKeys.has(item.slotKey) || logged.exerciseIds.has(item.exerciseId),
+    ).length
+    if (covered / session.day.exercises.length >= SESSION_COMPLETION_RATIO) set.add(index)
+  }
+
   return set
 })
 
@@ -300,8 +337,16 @@ function logsForSession(index: number): LogEntry[] {
   return logs.value.filter((l) => l.sessionIndex === index)
 }
 
-function logFor(index: number, exerciseId: string): LogEntry | null {
-  return logs.value.find((l) => l.sessionIndex === index && l.exerciseId === exerciseId) ?? null
+function logFor(index: number, exerciseId: string, slotKey?: string): LogEntry | null {
+  return (
+    logs.value.find(
+      (l) =>
+        l.sessionIndex === index &&
+        (slotKey
+          ? l.slotKey === slotKey || (!l.slotKey && !!l.sessionKey && l.exerciseId === exerciseId)
+          : l.exerciseId === exerciseId),
+    ) ?? null
+  )
 }
 
 function lastLogFor(exerciseId: string): LogEntry | null {
@@ -315,11 +360,16 @@ function lastLogFor(exerciseId: string): LogEntry | null {
 
 function upsertLog(input: LogInput) {
   const idx = logs.value.findIndex(
-    (l) => l.sessionIndex === input.sessionIndex && l.exerciseId === input.exerciseId,
+    (l) =>
+      l.sessionIndex === input.sessionIndex &&
+      (input.slotKey
+        ? l.slotKey === input.slotKey || (!l.slotKey && l.exerciseId === input.exerciseId)
+        : l.exerciseId === input.exerciseId),
   )
   const clean = {
     sessionIndex: Math.max(1, Math.round(input.sessionIndex)),
     exerciseId: input.exerciseId,
+    slotKey: input.slotKey,
     sets: Math.max(1, Math.round(input.sets)),
     reps: Math.max(1, Math.round(input.reps)),
     weight: Math.max(0, Number(input.weight.toFixed(1))),
@@ -331,6 +381,7 @@ function upsertLog(input: LogInput) {
     logs.value[idx] = {
       ...prev,
       ...clean,
+      slotKey: clean.slotKey ?? prev.slotKey,
       // 自由打卡补记计划动作时保留计划标记，避免把已完成训练退回未完成
       sessionKey: clean.sessionKey ?? prev.sessionKey,
     }
@@ -436,7 +487,10 @@ function muscleCredit(role: 'primary' | 'secondary' | 'stabilizer'): number {
 /** 当前轮的计划容量：按处方累计每肌群直接组，并按分期与水平折算目标区间 */
 const volumeAudit = computed<VolumeAuditItem[]>(() => {
   const phase = activeSession.value.phase
-  const scale = PHASE_VOLUME_SCALE[phase.id] * LEVEL_VOLUME_SCALE[config.value.level]
+  const scale =
+    PHASE_VOLUME_SCALE[phase.id] *
+    LEVEL_VOLUME_SCALE[config.value.level] *
+    SPLIT_VOLUME_SCALE[config.value.split]
   const targets = VOLUME_TARGETS[config.value.goal]
   const sessions = plan.value.filter((session) => session.round === activeSession.value.round)
   const totals = new Map<string, number>()

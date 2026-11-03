@@ -25,8 +25,8 @@
 ## 状态与打卡（`src/composables/useTraining.ts`）
 
 - `selectedWeek + selectedDay` 合并为 `selectedIndex`；进入页面默认选中下一次未完成的训练。
-- `LogEntry.date` 改为 `sessionIndex`；`createdAt` 仅内部用于排序。
-- 完成判定：某次训练存在带 `sessionKey` 的打卡即视为完成。
+- `LogEntry.date` 改为 `sessionIndex`；`createdAt` 仅内部用于排序。`LogEntry` 增加 `slotKey`，同一天重复动作或换动作后按动作位区分记录，旧计划记录缺省 `slotKey` 时按 `exerciseId` 兼容。
+- 完成判定：该次训练至少 80% 的计划动作位有打卡，且打卡的 `sessionKey` 与当前分化的训练日一致；自由打卡不参与完成判定。
 - 统计：本次动作完成数、本次组数与容量、估算时长、连续完成训练次数。
 - 热图范围：`session`（本次）/ `recent`（近 8 练）/ `all`（全部）。
 - 建议文案基于最近 4 练完成度。

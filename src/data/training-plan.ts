@@ -210,7 +210,7 @@ export const PHASES: Phase[] = [
     name: '减载恢复期',
     en: 'Deload & Supercompensation',
     rounds: [8, 8],
-    intent: '容量减半、强度回落，让延迟性疲劳消散，超量恢复在此时真正发生。',
+    intent: '容量下降约四成、强度回落，让延迟性疲劳消散，超量恢复在此时真正发生。',
     volume: '低容量',
     rpe: 'RPE 5–6',
   },
@@ -243,7 +243,7 @@ const PUSH_A: DayTemplate = {
   focus: '胸大肌 · 三角肌 · 肱三头肌',
   warmup: WARMUP_UPPER,
   slots: [
-    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'barbell-bench-press', 'barbell-incline-press'] },
+    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
     { role: 'secondary', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
     { role: 'accessory', label: '胸孤立', pool: ['cable-crossover', 'dumbbell-fly', 'pec-deck'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
@@ -259,10 +259,10 @@ const PUSH_B: DayTemplate = {
   focus: '胸大肌锁骨部 · 三角肌中后束 · 肱三头肌',
   warmup: WARMUP_UPPER,
   slots: [
-    { role: 'main', label: '上斜推', pool: ['smith-bench-press', 'dumbbell-incline-press', 'barbell-incline-press'] },
+    { role: 'main', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
     { role: 'accessory', label: '胸孤立', pool: ['low-cable-fly', 'dumbbell-fly', 'cable-crossover'] },
-    { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
-    { role: 'accessory', label: '三角肌中束', pool: ['cable-lateral-raise', 'lateral-raise', 'machine-lateral-raise'] },
+    { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'cable-lateral-raise', 'lateral-raise'] },
+    { role: 'accessory', label: '三角肌中束', pool: ['lateral-raise', 'machine-lateral-raise', 'cable-lateral-raise'] },
     { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
     { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'dumbbell-overhead-tricep-extension', 'dip'] },
     { role: 'core', label: '核心', pool: ['side-plank', 'pallof-press', 'cable-woodchop'] },
@@ -294,7 +294,7 @@ const PULL_B: DayTemplate = {
     { role: 'main', label: '垂直拉', pool: ['assisted-chin-up', 'neutral-grip-pull-up', 'chinup'] },
     { role: 'main', label: '水平拉', pool: ['chest-supported-row', 't-bar-row', 'pendlay-row'] },
     { role: 'accessory', label: '后束', pool: ['face-pull', 'reverse-pec-deck', 'prone-y-raise'] },
-    { role: 'accessory', label: '肱二头', pool: ['hammer-curl', 'machine-preacher-curl', 'incline-dumbbell-curl'] },
+    { role: 'accessory', label: '肱二头', pool: ['hammer-curl', 'machine-preacher-curl', 'rope-hammer-curl'] },
     { role: 'core', label: '核心', pool: ['hollow-body-hold', 'cable-crunch', 'trx-fallout'] },
   ],
 }
@@ -306,11 +306,11 @@ const LEGS_A: DayTemplate = {
   focus: '股四头肌 · 臀大肌 · 腘绳肌',
   warmup: WARMUP_LOWER,
   slots: [
-    { role: 'main', label: '深蹲', pool: ['leg-press', 'barbell-squat', 'front-squat'] },
+    { role: 'main', label: '深蹲', pool: ['goblet-squat', 'barbell-squat', 'front-squat'] },
     { role: 'secondary', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
     { role: 'accessory', label: '单腿', pool: ['step-up', 'bulgarian-split-squat', 'barbell-lunge'] },
-    { role: 'accessory', label: '小腿', pool: ['machine-calf-raise', 'seated-calf-raise', 'donkey-calf-raise'] },
-    { role: 'accessory', label: '小腿', pool: ['seated-calf-raise', 'smith-calf-raise', 'donkey-calf-raise'] },
+    { role: 'accessory', label: '小腿 · 腓肠肌', pool: ['machine-calf-raise', 'smith-calf-raise', 'donkey-calf-raise'] },
+    { role: 'accessory', label: '小腿 · 比目鱼肌', pool: ['seated-calf-raise'] },
     { role: 'core', label: '核心', pool: ['dead-bug', 'side-plank', 'copenhagen-plank'] },
   ],
 }
@@ -337,12 +337,12 @@ const PPL3_PUSH: DayTemplate = {
   focus: '胸大肌 · 三角肌中束 · 肱三头肌',
   warmup: WARMUP_UPPER,
   slots: [
-    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'barbell-bench-press', 'barbell-incline-press'] },
+    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
     { role: 'secondary', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
-    { role: 'accessory', label: '上斜推', pool: ['smith-bench-press', 'dumbbell-incline-press', 'barbell-incline-press'] },
+    { role: 'accessory', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
     { role: 'accessory', label: '胸孤立', pool: ['cable-crossover', 'dumbbell-fly', 'pec-deck'] },
-    { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
-    { role: 'accessory', label: '三角肌中束', pool: ['cable-lateral-raise', 'lateral-raise', 'machine-lateral-raise'] },
+    { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'cable-lateral-raise', 'lateral-raise'] },
+    { role: 'accessory', label: '三角肌中束', pool: ['lateral-raise', 'machine-lateral-raise', 'cable-lateral-raise'] },
     { role: 'accessory', label: '肱三头', pool: ['triceps-pushdown', 'overhead-cable-ext', 'skull-crusher'] },
     { role: 'accessory', label: '肱三头', pool: ['dumbbell-overhead-tricep-extension', 'dip', 'triceps-pushdown'] },
     { role: 'core', label: '核心', pool: ['plank', 'dead-bug', 'ab-wheel-rollout'] },
@@ -358,10 +358,10 @@ const PPL3_PULL: DayTemplate = {
   slots: [
     { role: 'main', label: '垂直拉', pool: ['assisted-pullup', 'lat-pulldown', 'weighted-pull-up'] },
     { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
-    { role: 'accessory', label: '水平拉', pool: ['chest-supported-row', 'seated-cable-row', 't-bar-row'] },
+    { role: 'accessory', label: '水平拉', pool: ['chest-supported-row', 't-bar-row', 'pendlay-row'] },
     { role: 'accessory', label: '后束与肩胛', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
     { role: 'accessory', label: '肱二头', pool: ['cable-curl', 'barbell-curl', 'incline-dumbbell-curl'] },
-    { role: 'accessory', label: '肱二头', pool: ['hammer-curl', 'machine-preacher-curl', 'incline-dumbbell-curl'] },
+    { role: 'accessory', label: '肱二头', pool: ['hammer-curl', 'machine-preacher-curl', 'rope-hammer-curl'] },
     { role: 'accessory', label: '斜方与握力', pool: ['barbell-shrug', 'upright-row', 'farmer-carry'] },
     { role: 'core', label: '核心', pool: ['dead-bug', 'hanging-knee-raise', 'hanging-leg-raise'] },
   ],
@@ -374,13 +374,13 @@ const PPL3_LEGS: DayTemplate = {
   focus: '股四头肌 · 臀大肌 · 腘绳肌',
   warmup: WARMUP_LOWER,
   slots: [
-    { role: 'main', label: '深蹲', pool: ['leg-press', 'barbell-squat', 'front-squat'] },
+    { role: 'main', label: '深蹲', pool: ['goblet-squat', 'barbell-squat', 'front-squat'] },
     { role: 'secondary', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
     { role: 'accessory', label: '单腿', pool: ['step-up', 'bulgarian-split-squat', 'barbell-lunge'] },
     { role: 'accessory', label: '腿举', pool: ['leg-press', 'hack-squat', 'smith-squat'] },
     { role: 'accessory', label: '腘绳肌', pool: ['leg-curl', 'seated-leg-curl', 'nordic-curl'] },
-    { role: 'accessory', label: '小腿', pool: ['machine-calf-raise', 'seated-calf-raise', 'donkey-calf-raise'] },
-    { role: 'accessory', label: '小腿', pool: ['seated-calf-raise', 'smith-calf-raise', 'donkey-calf-raise'] },
+    { role: 'accessory', label: '小腿 · 腓肠肌', pool: ['machine-calf-raise', 'smith-calf-raise', 'donkey-calf-raise'] },
+    { role: 'accessory', label: '小腿 · 比目鱼肌', pool: ['seated-calf-raise'] },
     { role: 'core', label: '核心', pool: ['dead-bug', 'side-plank', 'copenhagen-plank'] },
   ],
 }
@@ -392,7 +392,7 @@ const UPPER_A: DayTemplate = {
   focus: '胸大肌 · 背阔肌 · 三角肌',
   warmup: WARMUP_UPPER,
   slots: [
-    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'barbell-bench-press', 'barbell-incline-press'] },
+    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
     { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
     { role: 'secondary', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
@@ -410,7 +410,7 @@ const UPPER_B: DayTemplate = {
   warmup: WARMUP_UPPER,
   slots: [
     { role: 'main', label: '垂直拉', pool: ['assisted-pullup', 'lat-pulldown', 'pullup'] },
-    { role: 'main', label: '上斜推', pool: ['smith-bench-press', 'dumbbell-incline-press', 'barbell-incline-press'] },
+    { role: 'main', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
     { role: 'secondary', label: '水平拉', pool: ['chest-supported-row', 'seated-cable-row', 't-bar-row'] },
     { role: 'accessory', label: '胸孤立', pool: ['low-cable-fly', 'dumbbell-fly', 'pec-deck'] },
     { role: 'accessory', label: '后束', pool: ['face-pull', 'cable-rear-delt-fly', 'reverse-pec-deck'] },
@@ -458,7 +458,7 @@ const FULL_A: DayTemplate = {
   warmup: WARMUP_FULL,
   slots: [
     { role: 'main', label: '深蹲', pool: ['goblet-squat', 'barbell-squat', 'front-squat'] },
-    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'barbell-bench-press', 'barbell-incline-press'] },
+    { role: 'main', label: '水平推', pool: ['machine-chest-press', 'dumbbell-bench-press', 'barbell-bench-press'] },
     { role: 'main', label: '水平拉', pool: ['machine-row', 'seated-cable-row', 'barbell-row'] },
     { role: 'accessory', label: '髋铰链', pool: ['glute-bridge', 'romanian-deadlift', 'barbell-deadlift'] },
     { role: 'accessory', label: '胸孤立', pool: ['cable-crossover', 'dumbbell-fly', 'pec-deck'] },
@@ -479,7 +479,7 @@ const FULL_B: DayTemplate = {
     { role: 'main', label: '髋铰链', pool: ['hip-thrust-machine', 'romanian-deadlift', 'barbell-deadlift'] },
     { role: 'main', label: '垂直拉', pool: ['assisted-pullup', 'lat-pulldown', 'pullup'] },
     { role: 'main', label: '垂直推', pool: ['machine-shoulder-press', 'dumbbell-shoulder-press', 'barbell-overhead-press'] },
-    { role: 'secondary', label: '上斜推', pool: ['smith-bench-press', 'dumbbell-incline-press', 'barbell-incline-press'] },
+    { role: 'secondary', label: '上斜推', pool: ['incline-push-up', 'dumbbell-incline-press', 'barbell-incline-press'] },
     { role: 'accessory', label: '单腿', pool: ['step-up', 'bulgarian-split-squat', 'barbell-lunge'] },
     { role: 'accessory', label: '三角肌中束', pool: ['machine-lateral-raise', 'lateral-raise', 'cable-lateral-raise'] },
     { role: 'accessory', label: '肱二头', pool: ['cable-curl', 'barbell-curl', 'incline-dumbbell-curl'] },
@@ -497,12 +497,12 @@ const SPLIT_TEMPLATES: Record<SplitId, DayTemplate[]> = {
   ppl2: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B],
 }
 
-/** 分化本身决定的组数加成：循环越短，单次要补的容量越多 */
+/** 分化本身的组数加成：循环越短，单次主项多补 1 组；孤立动作靠槽位补量，不再叠组 */
 const SPLIT_SET_BONUS: Record<SplitId, Partial<Record<RoleId, number>>> = {
-  full: { main: 1, accessory: 2, core: 1 },
-  ppl: { main: 1, accessory: 1 },
-  ul: { accessory: 1 },
-  hybrid: { accessory: 1 },
+  full: { main: 1 },
+  ppl: { main: 1 },
+  ul: {},
+  hybrid: {},
   ppl2: {},
 }
 
@@ -515,7 +515,7 @@ const ROUND_NOTES = [
   '完成度 ≥80% 的主项 +2.5kg（下肢 +5kg），否则重复上次负荷。',
   '次数下调、负荷上调，主项留 1 次余力，孤立动作到力竭前 1 次。',
   '强度峰值阶段，只对状态最好的 1–2 个主项冲击顶层组。',
-  '减载 40–50%，全部动作 RPE ≤6，让超量恢复发生。',
+  '减载约 40%，全部动作 RPE ≤6，让超量恢复发生。',
 ]
 
 const ROLE_NOTE: Record<RoleId, string> = {
@@ -620,7 +620,8 @@ function prescriptionFor(
   split: SplitId,
 ): Prescription {
   const base = SETS_BY_PHASE[phase][role]
-  const splitBonus = SPLIT_SET_BONUS[split][role] ?? 0
+  // 减载期不叠加分化加成，否则 full/PPL 的减载课仍接近容量期
+  const splitBonus = phase === 'deload' ? 0 : (SPLIT_SET_BONUS[split][role] ?? 0)
   const levelPenalty =
     level === 1 && (role === 'secondary' || role === 'accessory' || role === 'core') ? -1 : 0
   const sets = base + splitBonus + levelPenalty
@@ -740,8 +741,8 @@ export const VOLUME_GROUP_DEFS: VolumeGroupDef[] = [
 
 /** 每轮直接组参考区间；目标差异体现在次数、负荷与休息，不在组数区间 */
 const BASE_VOLUME_TARGETS: Record<VolumeGroupType, [number, number]> = {
-  large: [9, 24],
-  posterior: [10, 24],
+  large: [9, 26],
+  posterior: [10, 26],
   medium: [10, 30],
   small: [7, 18],
   core: [6, 20],
@@ -761,11 +762,20 @@ export const PHASE_VOLUME_SCALE: Record<PhaseId, number> = {
   deload: 0.65,
 }
 
-/** 水平对容量目标的折算 */
+/** 水平对容量目标的折算：入门目标降一档；高阶不抬高目标区间，进步由动作难度与负荷承担 */
 export const LEVEL_VOLUME_SCALE: Record<Level, number> = {
-  1: 0.9,
+  1: 0.85,
   2: 1,
-  3: 1.1,
+  3: 1,
+}
+
+/** 分化对容量目标的折算：2 天全身每轮暴露次数少，目标区间下调 20% */
+export const SPLIT_VOLUME_SCALE: Record<SplitId, number> = {
+  full: 0.8,
+  ppl: 1,
+  ul: 1,
+  hybrid: 1,
+  ppl2: 1,
 }
 
 export interface HeatTier {

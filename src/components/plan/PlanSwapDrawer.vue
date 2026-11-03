@@ -56,8 +56,13 @@ const targetMuscleNames = computed(() =>
 /** 候选池：与当前动作共享同一个主动肌；同动作模式、同器械、难度接近的排前面 */
 const pool = computed<Exercise[]>(() => {
   const ex = current.value
-  if (!ex) return []
+  if (!ex || !props.item) return []
   const targets = new Set(targetMuscles.value)
+  const usedElsewhere = new Set(
+    training.activeDay.value.exercises
+      .filter((entry) => entry.slotKey !== props.item!.slotKey)
+      .map((entry) => entry.exerciseId),
+  )
   const affinity = (cand: Exercise): number =>
     (cand.pattern === ex.pattern ? 0 : 4) +
     (cand.equipment === ex.equipment ? 0 : 2) +
@@ -65,6 +70,7 @@ const pool = computed<Exercise[]>(() => {
   return EXERCISES.filter(
     (cand) =>
       cand.id !== ex.id &&
+      !usedElsewhere.has(cand.id) &&
       cand.muscles.some((hit) => hit.role === 'primary' && targets.has(hit.id)),
   ).sort((a, b) => affinity(a) - affinity(b) || a.zh.localeCompare(b.zh))
 })
@@ -99,7 +105,9 @@ const defaultName = computed(() =>
 const swapped = computed(() => (props.item ? training.isSwapped(props.item.slotKey) : false))
 
 const logged = computed(
-  () => !!props.item && !!training.logFor(props.sessionIndex, props.item.exerciseId),
+  () =>
+    !!props.item &&
+    !!training.logFor(props.sessionIndex, props.item.exerciseId, props.item.slotKey),
 )
 
 function equipName(ex: Exercise | null): string {

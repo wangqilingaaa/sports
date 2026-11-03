@@ -38,7 +38,7 @@ function rowStamp(item: PlannedExercise): string {
 }
 
 function seedRow(item: PlannedExercise) {
-  const saved = training.logFor(sessionIndex.value, item.exerciseId)
+  const saved = training.logFor(sessionIndex.value, item.exerciseId, item.slotKey)
   const last = training.lastLogFor(item.exerciseId)
   forms[item.uid] = {
     sets: saved?.sets ?? item.prescription.sets,
@@ -67,14 +67,14 @@ watch(() => props.session, seed, { immediate: true })
 const doneCount = computed(
   () =>
     day.value.exercises.filter(
-      (item) => !!training.logFor(sessionIndex.value, item.exerciseId),
+      (item) => !!training.logFor(sessionIndex.value, item.exerciseId, item.slotKey),
     ).length,
 )
 
 const total = computed(() => day.value.exercises.length)
 
 function savedFor(item: PlannedExercise) {
-  return training.logFor(sessionIndex.value, item.exerciseId)
+  return training.logFor(sessionIndex.value, item.exerciseId, item.slotKey)
 }
 
 function exerciseOf(item: PlannedExercise) {
@@ -93,6 +93,7 @@ function logRow(item: PlannedExercise) {
     sessionIndex: sessionIndex.value,
     sessionKey: day.value.key,
     exerciseId: item.exerciseId,
+    slotKey: item.slotKey,
     sets: form.sets,
     reps: form.reps,
     weight: form.weight,
@@ -134,7 +135,7 @@ function roleLabel(role: PlannedExercise['role']): string {
       </div>
       <div class="session-progress">
         <b>{{ doneCount }}</b><span>/ {{ total }}</span>
-        <em>{{ doneCount === total ? '已完成' : '动作已打卡' }}</em>
+        <em>{{ training.sessionDone(sessionIndex) ? '已完成' : '动作已打卡' }}</em>
       </div>
     </header>
 
