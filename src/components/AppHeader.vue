@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { ChartColumn } from '@lucide/vue'
+import { ChartColumn, ChartLine } from '@lucide/vue'
 import { useAtlas } from '@/composables/useAtlas'
 
 const atlas = useAtlas()
@@ -10,6 +10,7 @@ const router = useRouter()
 
 const scrolled = ref(false)
 const isPlan = computed(() => route.name === 'plan')
+const isStats = computed(() => route.name === 'stats')
 
 function onScroll() {
   scrolled.value = window.scrollY > 12
@@ -56,12 +57,13 @@ onBeforeUnmount(() => {
       <span class="topbar-stat"><b>{{ atlas.totalExercises }}</b>动作</span>
       <span class="topbar-stat"><b>{{ atlas.totalMuscles }}</b>肌群</span>
       <span class="topbar-stat"><b>{{ atlas.totalEquipment }}</b>器械</span>
-      <RouterLink
-        class="plan-switch"
-        :to="isPlan ? { name: 'atlas', hash: '#model' } : { name: 'plan' }"
-      >
+      <RouterLink class="plan-switch" :class="{ 'is-active': isPlan }" :to="{ name: 'plan' }">
         <ChartColumn :size="13" :stroke-width="2" />
-        {{ isPlan ? '动作库' : '训练计划' }}
+        训练计划
+      </RouterLink>
+      <RouterLink class="plan-switch" :class="{ 'is-active': isStats }" :to="{ name: 'stats' }">
+        <ChartLine :size="13" :stroke-width="2" />
+        统计
       </RouterLink>
     </div>
   </header>

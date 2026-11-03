@@ -6,6 +6,7 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'atlas', component: AtlasView },
     { path: '/plan', name: 'plan', component: () => import('@/views/TrainingPlanView.vue') },
+    { path: '/stats', name: 'stats', component: () => import('@/views/StatsView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior(to, from, savedPosition) {

@@ -3,6 +3,7 @@ import App from './App.vue'
 import router from './router'
 import './styles/main.css'
 import './styles/plan.css'
+import './styles/stats.css'
 
 const app = createApp(App)
 

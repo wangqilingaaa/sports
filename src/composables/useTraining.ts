@@ -483,7 +483,7 @@ function removeLog(id: string) {
   logs.value = logs.value.filter((l) => l.id !== id)
 }
 
-function effortFactor(rpe: number): number {
+export function effortFactor(rpe: number): number {
   if (rpe >= 9) return 1.1
   if (rpe >= 8) return 1
   if (rpe >= 6) return 0.85

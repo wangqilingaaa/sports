@@ -30,6 +30,15 @@
 - **训练提示**：同一肌群 48 小时内重复训练会提示恢复间隔；力量目标推荐全身/上下肢分化；减脂目标附有氧处方；全身分化可切换精简版（少 2 个孤立动作），并显示预计时长；每次训练附冷身。
 - **状态与减载**：训练前可按睡眠 / 酸痛 / 精力自评，状态低时建议主项减组、RPE 上限 8；训练超过 6 周或 RPE 持续偏高时提示插入减载。
 
+### 训练统计（`/stats`）
+
+- **跨周期聚合**：只从打卡记录汇总，不依赖当前计划配置；范围可选近 8 周 / 近 12 周 / 近 6 个月 / 全部，粒度按周或按月。
+- **总览**：训练次数、总组数、外部负重容量、训练周数、按组数加权的平均 RPE。
+- **训练量趋势**：柱状图，组数与吨位切换；自重动作不计入吨位。
+- **肌群容量趋势**：12 个容量组的周均有效组（组数 × 激活占比 × RPE 系数），附目标带与范围累计；目标带按当前水平与分化折算。
+- **力量进展与 PR**：按动作查看 e1RM 趋势（每个时间桶取最高值），并列出全量历史的最佳 e1RM、最重单组与最近训练日期。
+- **口径限制**：历史周期没有计划快照，完成率不参与长期统计；PR 表不受时间范围筛选影响。
+
 ### 交互细节
 
 | 快捷键 | 行为 |
@@ -71,23 +80,25 @@ pnpm dev            # http://127.0.0.1:5178
 
 `sync:demo` 只复制 `src/data/demo-map.ts` 里登记过的 slug（每个 3 帧），不会把上游 900+ 张图全量塞进产物；已失效的旧目录会被清掉。素材缺失或 slug 不在上游 manifest 时会以非 0 退出并列出问题。
 
-> 部署到静态托管时注意：路由使用 `createWebHistory`，需要配置 SPA 回退（所有未命中路径重写到 `index.html`），否则直接访问 `/plan` 会 404。
+> 部署到静态托管时注意：路由使用 `createWebHistory`，需要配置 SPA 回退（所有未命中路径重写到 `index.html`），否则直接访问 `/plan` 或 `/stats` 会 404。
 
 ## 目录结构
 
 ```
 src/
-├── views/            页面：AtlasView（动作库）/ TrainingPlanView（训练计划）
+├── views/            页面：AtlasView（动作库）/ TrainingPlanView（训练计划）/ StatsView（统计）
 ├── components/       模型、列表、筛选、抽屉、2D 示意
-│   └── plan/         计划页组件：训练日、容量审计、自由打卡、3D 热图
+│   ├── plan/         计划页组件：训练日、容量审计、自由打卡、3D 热图
+│   └── stats/        统计页组件：KPI、趋势图、PR 表
 ├── composables/      全局状态与逻辑
 │   ├── useAtlas.ts           动作库状态（筛选、选中、高亮）
 │   ├── useAtlasQuerySync.ts  URL ↔ 状态双向同步
 │   ├── useAnatomyModel.ts    模型加载与网格映射
 │   ├── useContraction.ts     收缩相位时钟
-│   └── useTraining.ts        计划生成、打卡、热图、建议（含 localStorage）
+│   ├── useTraining.ts        计划生成、打卡、热图、建议（含 localStorage）
+│   └── useTrainingStats.ts   跨周期统计聚合（周/月分桶、肌群、e1RM、PR）
 ├── data/             静态数据（动作、肌群、器械、模板、搜索索引、素材映射）
-├── styles/           main.css / plan.css
+├── styles/           main.css / plan.css / stats.css
 └── router/           路由与滚动行为
 scripts/sync-demo-assets.mjs   素材同步
 public/models/                 3D 模型（含署名文件）

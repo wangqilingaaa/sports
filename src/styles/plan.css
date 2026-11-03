@@ -21,6 +21,12 @@
   background: var(--accent-soft);
 }
 
+.plan-switch.is-active {
+  color: var(--accent-deep);
+  border-color: rgba(178, 58, 43, 0.4);
+  background: var(--accent-soft);
+}
+
 /* ───────────── 页面骨架 ───────────── */
 .plan-page {
   position: relative;
