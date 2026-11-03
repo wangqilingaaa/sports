@@ -481,6 +481,33 @@ onBeforeUnmount(() => {
             {{ training.recoveryNote.value }}
           </div>
 
+          <!-- 训练前自评：放在训练卡之前，先定状态再按处方练 -->
+          <section class="plan-card readiness-card">
+            <header class="plan-card-head">
+              <div>
+                <div class="plan-kicker">Readiness · 今日状态</div>
+                <h3 class="plan-card-title">训练前自评</h3>
+              </div>
+              <span class="stats-pct">{{ training.readinessScore.value }}/9</span>
+            </header>
+            <div class="readiness-grid">
+              <div v-for="dim in READINESS_DIMS" :key="dim.key" class="readiness-row">
+                <span>{{ dim.zh }}</span>
+                <div class="readiness-options">
+                  <button
+                    v-for="opt in dim.options"
+                    :key="opt.value"
+                    :class="{ 'is-active': training.readiness.value[dim.key] === opt.value }"
+                    @click="setReadiness(dim.key, opt.value)"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p class="readiness-note">{{ training.readinessAdvice.value }}</p>
+          </section>
+
           <!-- 当前训练与打卡 -->
           <PlanSession
             :session="training.activeSession.value"
@@ -659,33 +686,6 @@ onBeforeUnmount(() => {
                 <i :style="{ background: t.color }"></i>{{ t.label }}
               </span>
             </div>
-          </section>
-
-          <!-- 今日状态自评 -->
-          <section class="plan-card readiness-card">
-            <header class="plan-card-head">
-              <div>
-                <div class="plan-kicker">Readiness · 今日状态</div>
-                <h3 class="plan-card-title">训练前自评</h3>
-              </div>
-              <span class="stats-pct">{{ training.readinessScore.value }}/9</span>
-            </header>
-            <div class="readiness-grid">
-              <div v-for="dim in READINESS_DIMS" :key="dim.key" class="readiness-row">
-                <span>{{ dim.zh }}</span>
-                <div class="readiness-options">
-                  <button
-                    v-for="opt in dim.options"
-                    :key="opt.value"
-                    :class="{ 'is-active': training.readiness.value[dim.key] === opt.value }"
-                    @click="setReadiness(dim.key, opt.value)"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p class="readiness-note">{{ training.readinessAdvice.value }}</p>
           </section>
 
           <!-- 调整建议 -->
