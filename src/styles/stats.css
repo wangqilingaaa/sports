@@ -172,6 +172,314 @@
   color: var(--ink-4);
 }
 
+/* ───────────── 主项目标 ───────────── */
+.stats-goals {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.goal-toolbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.goal-note {
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+}
+
+.goal-add {
+  flex: 0 0 auto;
+  padding-bottom: 1px;
+  border-bottom: 1px dotted var(--line-2);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--accent-deep);
+}
+
+.goal-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.goals-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.goal-item {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+  padding: 12px 13px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.goal-item.is-done {
+  border-color: rgba(74, 123, 115, 0.38);
+}
+
+.goal-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.goal-name {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.goal-sub {
+  margin-top: 2px;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.goal-actions button {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--ink-4);
+}
+
+.goal-actions button:hover {
+  color: var(--accent);
+}
+
+.goal-actions button.is-danger:hover {
+  color: var(--accent-deep);
+}
+
+.goal-progress {
+  position: relative;
+  height: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.goal-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.78;
+  transition: width 0.3s var(--ease);
+}
+
+.goal-item.is-done .goal-progress-fill {
+  background: var(--teal);
+  opacity: 0.82;
+}
+
+.goal-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-2);
+}
+
+.goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+}
+
+.goal-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.goal-done {
+  color: var(--teal);
+  font-weight: 500;
+}
+
+.goal-next {
+  color: var(--ink-4);
+}
+
+.goal-milestones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.goal-milestones-label {
+  margin-right: 2px;
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.goal-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-2);
+}
+
+.goal-chip em {
+  font-style: normal;
+  font-family: var(--sans);
+  font-size: 8px;
+  color: var(--ink-4);
+}
+
+.goal-none {
+  margin: 0;
+  font-size: 9.5px;
+  color: var(--ink-4);
+}
+
+.goal-empty {
+  padding: 26px 18px;
+  border: 1px dashed var(--line-2);
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.goal-empty p {
+  margin: 0;
+}
+
+.goal-empty .stats-empty-link {
+  margin-top: 12px;
+}
+
+.goal-empty .stats-empty-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.goal-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 13px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+}
+
+.goal-editor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.goal-editor-title {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.goal-editor-head button {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--ink-4);
+}
+
+.goal-editor-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.goal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+.goal-field .stats-select {
+  min-width: 220px;
+}
+
+.goal-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.goal-input {
+  width: 110px;
+  padding: 5px 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.goal-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.goal-field em {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--ink-4);
+}
+
+.goal-save {
+  padding: 6px 14px;
+  background: var(--accent);
+  border-radius: 2px;
+  color: #fdf8f0;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+.goal-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.goal-hint {
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+}
+
 /* ───────────── 卡片 ───────────── */
 .stats-card {
   margin-top: 14px;
@@ -269,6 +577,20 @@
 
 .stats-chart-dots circle:hover {
   fill: var(--accent);
+}
+
+.stats-chart-reference line {
+  stroke: var(--teal);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+  opacity: 0.72;
+}
+
+.stats-chart-reference text {
+  font-family: var(--sans);
+  font-size: 10px;
+  fill: var(--teal);
+  letter-spacing: 0.04em;
 }
 
 .stats-bars rect {
@@ -569,6 +891,17 @@
   font-size: 10.5px;
 }
 
+.stats-table .stats-goal-tag {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  border: 1px solid rgba(178, 58, 43, 0.3);
+  color: var(--accent);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
 .stats-more {
   margin-top: 9px;
   padding-bottom: 1px;
@@ -671,8 +1004,18 @@
     text-align: left;
   }
 
-  .stats-chart-axis text {
+  .stats-chart-axis text,
+  .stats-chart-reference text {
     font-size: 18px;
+  }
+
+  .goal-item {
+    max-width: none;
+  }
+
+  .goal-field .stats-select {
+    min-width: 0;
+    width: 100%;
   }
 
   .stats-chart-total {

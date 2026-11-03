@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue'
 import { formatDate, type PrLift } from '@/composables/useTrainingStats'
 
-const props = defineProps<{ prs: PrLift[] }>()
+const props = withDefaults(defineProps<{ prs: PrLift[]; goalIds?: string[] }>(), {
+  goalIds: () => [],
+})
 
 const expanded = ref(false)
 
@@ -32,6 +34,7 @@ const shown = computed(() => (expanded.value ? props.prs : props.prs.slice(0, 8)
           <tr v-for="row in shown" :key="row.id">
             <td class="stats-table-name">
               {{ row.zh }}
+              <span v-if="goalIds.includes(row.id)" class="stats-goal-tag">目标</span>
               <span>{{ row.entries }} 条记录</span>
             </td>
             <td>

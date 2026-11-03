@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { ArrowLeft } from '@lucide/vue'
 import {
+  GOAL_MILESTONE_STEP,
   STATS_GRANULARITIES,
   STATS_RANGES,
   useTrainingStats,
 } from '@/composables/useTrainingStats'
 import StatsKpiRow from '@/components/stats/StatsKpiRow.vue'
+import LiftGoals from '@/components/stats/LiftGoals.vue'
 import VolumeTrendChart from '@/components/stats/VolumeTrendChart.vue'
 import MuscleTrendChart from '@/components/stats/MuscleTrendChart.vue'
 import MuscleBalanceBars from '@/components/stats/MuscleBalanceBars.vue'
@@ -14,6 +16,11 @@ import StrengthTrendChart from '@/components/stats/StrengthTrendChart.vue'
 import PrTable from '@/components/stats/PrTable.vue'
 
 const stats = useTrainingStats()
+
+const activeGoal = computed(() => {
+  const id = stats.activeStrength.value?.id
+  return id ? (stats.goalProgress.value.find((goal) => goal.id === id) ?? null) : null
+})
 
 function selectMuscle(id: string) {
   stats.selectedMuscleId.value = id
@@ -86,6 +93,19 @@ onMounted(() => {
         <section class="stats-card">
           <header class="stats-card-head">
             <div>
+              <div class="stats-kicker">Goals · 主项</div>
+              <h2 class="stats-card-title">主项目标与里程碑</h2>
+            </div>
+            <span class="stats-card-meta">
+              全量历史 · 目标按 e1RM 计算 · 每 {{ GOAL_MILESTONE_STEP }} kg 里程碑
+            </span>
+          </header>
+          <LiftGoals :goals="stats.goalProgress.value" :prs="stats.prs.value" />
+        </section>
+
+        <section class="stats-card">
+          <header class="stats-card-head">
+            <div>
               <div class="stats-kicker">Volume · 训练量</div>
               <h2 class="stats-card-title">训练量趋势</h2>
             </div>
@@ -130,9 +150,10 @@ onMounted(() => {
               :exercises="stats.strengthExercises.value"
               :selected-id="stats.selectedStrengthId.value"
               :active="stats.activeStrength.value"
+              :goal="activeGoal"
               @select="selectStrength"
             />
-            <PrTable :prs="stats.prs.value" />
+            <PrTable :prs="stats.prs.value" :goal-ids="stats.goalProgress.value.map((goal) => goal.id)" />
           </div>
         </section>
 

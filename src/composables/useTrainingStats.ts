@@ -89,7 +89,29 @@ export interface PrLift {
   bestE1rm: { value: number; weight: number; reps: number; at: number }
   bestWeight: { weight: number; reps: number; at: number }
   lastAt: number
+  compound: boolean
 }
+
+export interface LiftMilestone {
+  value: number
+  at: number
+  weight: number
+  reps: number
+}
+
+export interface GoalProgress {
+  id: string
+  zh: string
+  target: number
+  best: number
+  progress: number
+  remaining: number
+  achievedAt: number | null
+  nextMilestone: number | null
+  milestones: LiftMilestone[]
+}
+
+export const GOAL_MILESTONE_STEP = 5
 
 const DAY = 86_400_000
 
@@ -403,8 +425,69 @@ export function useTrainingStats() {
         id,
         zh: EXERCISE_MAP.get(id)?.zh ?? id,
         ...info,
+        compound: EXERCISE_MAP.get(id)?.pattern !== 'isolation',
       }))
       .sort((a, b) => b.lastAt - a.lastAt)
+  })
+
+  const goalProgress = computed<GoalProgress[]>(() => {
+    const goals = training.goals.value
+    const ids = Object.keys(goals)
+    if (!ids.length) return []
+
+    const logsByExercise = new Map<string, LogEntry[]>()
+    for (const log of logs.value) {
+      if (log.weight <= 0) continue
+      const list = logsByExercise.get(log.exerciseId) ?? []
+      list.push(log)
+      logsByExercise.set(log.exerciseId, list)
+    }
+
+    return ids
+      .map((id) => {
+        const target = goals[id]
+        const list = (logsByExercise.get(id) ?? [])
+          .slice()
+          .sort((a, b) => a.createdAt - b.createdAt)
+        let best = 0
+        let achievedAt: number | null = null
+        let lastMilestone = 0
+        const milestones: LiftMilestone[] = []
+
+        for (const log of list) {
+          const value = epley(log)
+          if (achievedAt === null && value >= target) achievedAt = log.createdAt
+          if (value > best) {
+            best = value
+            const bucket = Math.floor(value / GOAL_MILESTONE_STEP) * GOAL_MILESTONE_STEP
+            if (bucket > lastMilestone) {
+              milestones.push({ value: bucket, at: log.createdAt, weight: log.weight, reps: log.reps })
+              lastMilestone = bucket
+            }
+          }
+        }
+
+        const nextMilestone =
+          best >= target
+            ? null
+            : Math.min(
+                Math.floor(best / GOAL_MILESTONE_STEP) * GOAL_MILESTONE_STEP + GOAL_MILESTONE_STEP,
+                target,
+              )
+
+        return {
+          id,
+          zh: EXERCISE_MAP.get(id)?.zh ?? id,
+          target,
+          best,
+          progress: Math.min(100, round1((best / target) * 100)),
+          remaining: round1(Math.max(0, target - best)),
+          achievedAt,
+          nextMilestone,
+          milestones,
+        }
+      })
+      .sort((a, b) => b.progress - a.progress)
   })
 
   const rangeLabel = computed(() => {
@@ -431,6 +514,7 @@ export function useTrainingStats() {
     strengthExercises,
     activeStrength,
     prs,
+    goalProgress,
     refreshNow,
   }
 }

@@ -14,11 +14,14 @@ const props = withDefaults(
     zeroBased?: boolean
     area?: boolean
     emptyText?: string
+    reference?: number | null
+    referenceLabel?: string
   }>(),
   {
     zeroBased: true,
     area: false,
     emptyText: '当前范围内没有数据',
+    reference: null,
   },
 )
 
@@ -45,10 +48,16 @@ const values = computed(() =>
 
 const hasData = computed(() => values.value.length > 0)
 
+const reference = computed(() =>
+  typeof props.reference === 'number' && Number.isFinite(props.reference) ? props.reference : null,
+)
+
 const scale = computed(() => {
   if (!values.value.length) return { lo: 0, hi: 1, ticks: [0, 0.5, 1] }
-  const rawMin = Math.min(...values.value)
-  const rawMax = Math.max(...values.value)
+  const extent =
+    reference.value === null ? values.value : [...values.value, reference.value]
+  const rawMin = Math.min(...extent)
+  const rawMax = Math.max(...extent)
 
   if (props.zeroBased) {
     const step = niceStep(Math.max(rawMax, 1) / 4)
@@ -168,6 +177,18 @@ const xTicks = computed(() => {
           :y1="yAt(tick)"
           :y2="yAt(tick)"
         />
+      </g>
+
+      <g v-if="reference !== null" class="stats-chart-reference">
+        <line
+          :x1="PAD.left"
+          :x2="W - PAD.right"
+          :y1="yAt(reference)"
+          :y2="yAt(reference)"
+        />
+        <text :x="W - PAD.right" :y="yAt(reference) - 5" text-anchor="end">
+          {{ referenceLabel ?? reference }}
+        </text>
       </g>
 
       <g class="stats-chart-axis">

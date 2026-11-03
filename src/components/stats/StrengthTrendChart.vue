@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { StrengthExerciseOption, StrengthSeries } from '@/composables/useTrainingStats'
+import type {
+  GoalProgress,
+  StrengthExerciseOption,
+  StrengthSeries,
+} from '@/composables/useTrainingStats'
 import StatsLineChart from './StatsLineChart.vue'
 
 const props = defineProps<{
   exercises: StrengthExerciseOption[]
   selectedId: string
   active: StrengthSeries | null
+  goal?: GoalProgress | null
 }>()
 
 const emit = defineEmits<{ (event: 'select', id: string): void }>()
@@ -47,6 +52,7 @@ function onChange(event: Event) {
 
       <span v-if="best !== null" class="stats-chart-summary">
         <b>{{ best }}</b> kg 范围最佳 e1RM
+        <template v-if="goal"> · 目标 {{ goal.target }} kg</template>
       </span>
     </div>
 
@@ -54,6 +60,8 @@ function onChange(event: Event) {
       :points="active?.points ?? []"
       unit="kg"
       :zero-based="false"
+      :reference="goal?.target ?? null"
+      :reference-label="goal ? `目标 ${goal.target} kg` : ''"
       empty-text="当前范围内没有负重记录"
     />
 

@@ -146,6 +146,8 @@ const logs = ref<LogEntry[]>([])
 /** 用户自己换过的动作位；计划本身仍由配置推导，这里是覆盖层 */
 const swaps = ref<PlanSwaps>({})
 const readiness = ref<Readiness>({ sleep: 2, soreness: 2, energy: 2 })
+/** 主项目标：exerciseId → 目标 e1RM kg */
+const goals = ref<Record<string, number>>({})
 
 /** 换动作必须保持复合/孤立属性并共享主动肌；防止老存档把主项换成孤立动作 */
 function swapCompatible(currentId: string, nextId: string): boolean {
@@ -173,6 +175,17 @@ function normalizeSwaps(raw: unknown): PlanSwaps {
     if (defaultId && EXERCISE_MAP.has(exerciseId) && swapCompatible(defaultId, exerciseId)) {
       out[slotKey] = exerciseId
     }
+  }
+  return out
+}
+
+function normalizeGoals(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, number> = {}
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!EXERCISE_MAP.has(id) || typeof value !== 'number' || !Number.isFinite(value)) continue
+    const target = Math.round(value * 2) / 2
+    if (target >= 1 && target <= 1000) out[id] = target
   }
   return out
 }
@@ -267,6 +280,7 @@ function hydrate() {
       logs?: unknown[]
       swaps?: unknown
       readiness?: unknown
+      goals?: unknown
     }
     const c = parsed.config
     let legacyStart: string | null = null
@@ -302,6 +316,7 @@ function hydrate() {
       )
     }
     swaps.value = normalizeSwaps(parsed.swaps)
+    goals.value = normalizeGoals(parsed.goals)
     if (parsed.readiness && typeof parsed.readiness === 'object') {
       const rawReadiness = parsed.readiness as Record<string, unknown>
       for (const key of ['sleep', 'soreness', 'energy'] as const) {
@@ -325,6 +340,7 @@ function persist() {
         logs: logs.value,
         swaps: swaps.value,
         readiness: readiness.value,
+        goals: goals.value,
       }),
     )
   } catch {
@@ -334,7 +350,7 @@ function persist() {
 
 hydrate()
 persist()
-watch([config, logs, swaps, readiness], persist, { deep: true })
+watch([config, logs, swaps, readiness, goals], persist, { deep: true })
 
 const selectedIndex = ref(1)
 const heatRange = ref<HeatRange>('session')
@@ -800,6 +816,21 @@ function setConfig(patch: Partial<PlanConfig>) {
   selectedIndex.value = Math.min(selectedIndex.value, totalSessions.value)
 }
 
+/** 主项目标按 0.5kg 取整；只接受动作库内的负重动作 */
+function setLiftGoal(exerciseId: string, target: number) {
+  if (!EXERCISE_MAP.has(exerciseId)) return
+  const value = Math.round(target * 2) / 2
+  if (!Number.isFinite(value) || value < 1 || value > 1000) return
+  goals.value = { ...goals.value, [exerciseId]: value }
+}
+
+function clearLiftGoal(exerciseId: string) {
+  if (!(exerciseId in goals.value)) return
+  const next = { ...goals.value }
+  delete next[exerciseId]
+  goals.value = next
+}
+
 /** 记住某个动作位换成的动作；不兼容的替换会被忽略 */
 function swapExercise(slotKey: string, exerciseId: string) {
   if (!EXERCISE_MAP.has(exerciseId)) return
@@ -837,6 +868,7 @@ export function useTraining() {
   return {
     config,
     logs,
+    goals,
     plan,
     totalSessions,
     activeSplit,
@@ -870,6 +902,8 @@ export function useTraining() {
     upsertLog,
     removeLog,
     setConfig,
+    setLiftGoal,
+    clearLiftGoal,
     swapExercise,
     resetSwap,
     isSwapped,
