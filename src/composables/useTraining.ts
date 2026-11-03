@@ -3,6 +3,7 @@ import { EXERCISE_MAP } from '@/data/exercises'
 import { MUSCLE_MAP } from '@/data/muscles'
 import {
   buildPlan,
+  cycleDaysFor,
   DAYS_TO_SPLIT,
   LEVEL_VOLUME_SCALE,
   PHASE_VOLUME_SCALE,
@@ -13,6 +14,7 @@ import {
   VOLUME_GROUP_DEFS,
   VOLUME_TARGETS,
   type DaysPerWeek,
+  type FocusGroupId,
   type GoalId,
   type Level,
   type PlanConfig,
@@ -124,6 +126,7 @@ function defaultConfig(): PlanConfig {
     split: 'ul',
     cycle: 1,
     compact: false,
+    focus: [],
   }
 }
 
@@ -131,6 +134,7 @@ const VALID_GOALS: GoalId[] = ['hypertrophy', 'strength', 'recondition']
 const VALID_DAYS: DaysPerWeek[] = [2, 3, 4, 5, 6]
 const VALID_LEVELS: Level[] = [1, 2, 3]
 const VALID_SPLITS: SplitId[] = SPLITS.map((split) => split.id)
+const VALID_FOCUS: FocusGroupId[] = VOLUME_GROUP_DEFS.map((group) => group.id)
 
 const config = ref<PlanConfig>(defaultConfig())
 const logs = ref<LogEntry[]>([])
@@ -155,7 +159,8 @@ function swapCompatible(currentId: string, nextId: string): boolean {
 function normalizeSwaps(raw: unknown): PlanSwaps {
   if (!raw || typeof raw !== 'object') return {}
   const defaults = new Map<string, string>()
-  for (const session of buildPlan(config.value)) {
+  // 换过的动作位可能暂时不在重点部位的计划里，用不限部位的完整计划建立默认值
+  for (const session of buildPlan({ ...config.value, focus: [] })) {
     for (const item of session.day.exercises) defaults.set(item.slotKey, item.exerciseId)
   }
   const out: PlanSwaps = {}
@@ -293,6 +298,12 @@ function hydrate() {
         config.value.cycle = Math.trunc(c.cycle)
       }
       config.value.compact = typeof c.compact === 'boolean' ? c.compact : false
+      config.value.focus = Array.isArray(c.focus)
+        ? c.focus.filter(
+            (id): id is FocusGroupId =>
+              typeof id === 'string' && VALID_FOCUS.includes(id as FocusGroupId),
+          )
+        : []
       if (typeof c.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.startDate)) {
         legacyStart = c.startDate
       }
@@ -336,6 +347,8 @@ const heatRange = ref<HeatRange>('session')
 
 const plan = computed(() => buildPlan(config.value, swaps.value))
 const totalSessions = computed(() => plan.value.length)
+/** 每轮实际训练日数：限定重点部位后可能少于分化天数 */
+const cycleDays = computed(() => cycleDaysFor(config.value, swaps.value))
 const activeSplit = computed(() => SPLIT_MAP.get(config.value.split) ?? SPLITS[0])
 const activeSession = computed(() => plan.value[selectedIndex.value - 1] ?? plan.value[0])
 const activeDay = computed(() => activeSession.value.day)
@@ -828,6 +841,7 @@ export function useTraining() {
     goals,
     plan,
     totalSessions,
+    cycleDays,
     activeSplit,
     selectedIndex,
     activeSession,

@@ -7,8 +7,10 @@ import {
   GOALS,
   HEAT_TIERS,
   SPLITS,
+  VOLUME_GROUP_DEFS,
   heatTier,
   phasesFor,
+  type FocusGroupId,
   type GoalId,
   type Level,
   type Phase,
@@ -35,6 +37,9 @@ const phase = computed(() => training.activeSession.value.phase)
 const railPhases = computed(() => phasesFor(training.config.value.level))
 const goal = computed(() => GOALS.find((g) => g.id === training.config.value.goal) ?? GOALS[0])
 const split = computed(() => training.activeSplit.value)
+const cycleDays = computed(() => training.cycleDays.value)
+const focusIds = computed(() => training.config.value.focus)
+const focusAll = computed(() => focusIds.value.length === 0)
 const activeDay = computed(() => training.activeDay.value)
 const activeLogs = computed(() =>
   training.logsForSession(training.selectedIndex.value, activeDay.value.key),
@@ -93,11 +98,11 @@ const completionPct = computed(() =>
 const topMuscles = computed(() => training.heatDetail.value.slice(0, 6))
 
 function phaseStart(p: Phase): number {
-  return (p.rounds[0] - 1) * split.value.days + 1
+  return (p.rounds[0] - 1) * cycleDays.value + 1
 }
 
 function phaseEnd(p: Phase): number {
-  return p.rounds[1] * split.value.days
+  return p.rounds[1] * cycleDays.value
 }
 
 function phaseState(p: Phase): 'done' | 'current' | 'upcoming' {
@@ -134,6 +139,38 @@ function setSplit(id: SplitId) {
 function setCompact(value: boolean) {
   training.setConfig({ compact: value })
 }
+
+function isFocused(id: FocusGroupId): boolean {
+  return focusIds.value.includes(id)
+}
+
+/** 按部位在分组表里的顺序排列，避免多选后 chips 顺序随点击变动 */
+function sortFocus(ids: FocusGroupId[]): FocusGroupId[] {
+  return VOLUME_GROUP_DEFS.filter((group) => ids.includes(group.id)).map((group) => group.id)
+}
+
+/** 全选状态下点某个部位 = 只看这个部位；取消到最后一个时回到全部，不允许空选 */
+function toggleFocus(id: FocusGroupId) {
+  if (focusAll.value) {
+    training.setConfig({ focus: [id] })
+    return
+  }
+  const next = isFocused(id) ? focusIds.value.filter((item) => item !== id) : [...focusIds.value, id]
+  training.setConfig({ focus: sortFocus(next) })
+}
+
+function setFocusAll() {
+  if (focusAll.value) return
+  training.setConfig({ focus: [] })
+}
+
+const focusSummary = computed(() => {
+  if (focusAll.value) return '全部部位'
+  const names = VOLUME_GROUP_DEFS.filter((group) => focusIds.value.includes(group.id)).map(
+    (group) => group.zh,
+  )
+  return names.length <= 4 ? names.join(' · ') : `已选 ${names.length} 个部位`
+})
 
 function selectPhase(p: Phase) {
   training.selectedIndex.value = phaseStart(p)
@@ -333,7 +370,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <span class="control-summary">
-            {{ split.zh }} · {{ split.days }} 练/循环 · 共 {{ totalSessions }} 练
+            {{ split.zh }} · {{ cycleDays }} 练/循环 · 共 {{ totalSessions }} 练
           </span>
           <button class="plan-link" @click="goNextOrNextCycle">
             {{
@@ -343,7 +380,31 @@ onBeforeUnmount(() => {
             }}
           </button>
         </div>
-        <p v-if="split.id === 'full'" class="split-note">
+        <div class="control-row">
+          <span class="control-key">部位</span>
+          <div class="control-chips">
+            <button
+              class="pchip is-compact"
+              :class="{ 'is-active': focusAll }"
+              title="不限制部位，按分化保留全部动作位"
+              @click="setFocusAll"
+            >
+              <b>全部</b>
+            </button>
+            <button
+              v-for="group in VOLUME_GROUP_DEFS"
+              :key="group.id"
+              class="pchip is-compact"
+              :class="{ 'is-active': !focusAll && isFocused(group.id) }"
+              :title="`只保留${group.zh}的动作位`"
+              @click="toggleFocus(group.id)"
+            >
+              <b>{{ group.zh }}</b>
+            </button>
+          </div>
+          <span class="control-summary">{{ focusSummary }}</span>
+        </div>
+        <p v-if="split.id === 'full' && focusAll" class="split-note">
           <button class="plan-link" @click="setCompact(!training.config.value.compact)">
             {{
               training.config.value.compact
@@ -589,7 +650,7 @@ onBeforeUnmount(() => {
             :round="training.activeSession.value.round"
             :phase-name="phase.name"
             :goal-zh="goal.zh"
-            :split-days="split.days"
+            :split-days="cycleDays"
           />
 
           <!-- 肌群强度排行 -->

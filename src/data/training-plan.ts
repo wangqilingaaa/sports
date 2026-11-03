@@ -9,6 +9,7 @@
  */
 
 import { EXERCISE_MAP } from './exercises'
+import { MUSCLE_MAP } from './muscles'
 import type { EquipmentId, MuscleId } from './types'
 
 export type GoalId = 'hypertrophy' | 'strength' | 'recondition'
@@ -17,6 +18,20 @@ export type RoleId = 'main' | 'secondary' | 'accessory' | 'core' | 'conditioning
 export type Level = 1 | 2 | 3
 export type DaysPerWeek = 2 | 3 | 4 | 5 | 6
 export type SplitId = 'full' | 'ppl' | 'ul' | 'hybrid' | 'ppl2'
+/** 重点部位，与容量审计的训练肌群分组一一对应 */
+export type FocusGroupId =
+  | 'chest'
+  | 'lats'
+  | 'upper-back'
+  | 'rear-delts'
+  | 'quads'
+  | 'glutes'
+  | 'hamstrings'
+  | 'side-delts'
+  | 'biceps'
+  | 'triceps'
+  | 'calves'
+  | 'core'
 
 export interface Split {
   id: SplitId
@@ -36,6 +51,8 @@ export interface PlanConfig {
   cycle: number
   /** 全身分化精简版：去掉全身日最后 2 个孤立动作 */
   compact: boolean
+  /** 重点部位；空数组表示不限部位，计划与未加此功能时一致 */
+  focus: FocusGroupId[]
 }
 
 export interface Goal {
@@ -842,6 +859,77 @@ export function parseRpe(rpe: string): number {
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length)
 }
 
+/** 模板里保留下来的动作位；slotIndex 始终是模板原始位序号 */
+export interface ResolvedSlot {
+  slot: SlotTemplate
+  slotIndex: number
+}
+
+export interface ResolvedTemplate {
+  template: DayTemplate
+  slots: ResolvedSlot[]
+}
+
+/** 动作主练肌肉落在哪些训练肌群；用于按重点部位筛选动作位 */
+export function focusGroupsForExercise(exerciseId: string): FocusGroupId[] {
+  const exercise = EXERCISE_MAP.get(exerciseId)
+  if (!exercise) return []
+  const primary = new Set(
+    exercise.muscles.filter((hit) => hit.role === 'primary').map((hit) => hit.id),
+  )
+  return VOLUME_GROUP_DEFS.filter((group) =>
+    group.members.some((id) => primary.has(id)),
+  ).map((group) => group.id)
+}
+
+/** 该动作位实际要做的动作；与 buildSession 的取值顺序保持一致 */
+function slotExerciseId(
+  templateKey: string,
+  slot: SlotTemplate,
+  slotIndex: number,
+  config: PlanConfig,
+  swaps: PlanSwaps,
+): string {
+  return (
+    swaps[`${templateKey}:${slotIndex}`] ||
+    slot.pool[Math.min(config.level - 1, slot.pool.length - 1)]
+  )
+}
+
+/**
+ * 解析当前配置下的训练日模板。
+ * 限定重点部位时丢掉不属于该部位的动作位，并剔除被清空的训练日；
+ * 所选部位与分化完全不搭时退回原始模板，避免生成空计划。
+ */
+export function resolveTemplates(config: PlanConfig, swaps: PlanSwaps = {}): ResolvedTemplate[] {
+  const split = SPLIT_MAP.get(config.split) ?? SPLITS[0]
+  const templates =
+    (config.goal === 'strength' ? STRENGTH_TEMPLATES[split.id] : undefined) ??
+    SPLIT_TEMPLATES[split.id]
+  const all = templates.map((template) => ({
+    template,
+    slots: template.slots.map((slot, slotIndex) => ({ slot, slotIndex })),
+  }))
+  if (!config.focus.length) return all
+  const focus = new Set(config.focus)
+  const filtered = all
+    .map(({ template, slots }) => ({
+      template,
+      slots: slots.filter(({ slot, slotIndex }) =>
+        focusGroupsForExercise(slotExerciseId(template.key, slot, slotIndex, config, swaps)).some(
+          (id) => focus.has(id),
+        ),
+      ),
+    }))
+    .filter(({ slots }) => slots.length > 0)
+  return filtered.length ? filtered : all
+}
+
+/** 每轮有效训练日数；限定重点部位后可能少于分化的天数 */
+export function cycleDaysFor(config: PlanConfig, swaps: PlanSwaps = {}): number {
+  return resolveTemplates(config, swaps).length
+}
+
 /** 按训练次序构造第 index 次训练；swaps 里记着的动作位会被替换 */
 export function buildSession(
   config: PlanConfig,
@@ -849,22 +937,27 @@ export function buildSession(
   swaps: PlanSwaps = {},
 ): PlanSession {
   const split = SPLIT_MAP.get(config.split) ?? SPLITS[0]
-  const total = PLAN_ROUNDS * split.days
+  const resolved = resolveTemplates(config, swaps)
+  const days = resolved.length
+  const total = PLAN_ROUNDS * days
   const safeIndex = Math.min(total, Math.max(1, Math.trunc(index)))
-  const round = Math.ceil(safeIndex / split.days)
+  const round = Math.ceil(safeIndex / days)
   const phase = phaseOf(round, config.level)
-  const templates =
-    (config.goal === 'strength' ? STRENGTH_TEMPLATES[split.id] : undefined) ??
-    SPLIT_TEMPLATES[split.id]
-  const tpl = templates[(safeIndex - 1) % split.days]
+  const { template: tpl, slots: tplSlots } = resolved[(safeIndex - 1) % days]
+  const focus = new Set(config.focus)
+  // 代谢收尾同属当天内容，没练到重点部位时不安排
   const conditioning =
-    config.goal === 'recondition'
-      ? { role: 'conditioning' as const, label: '代谢收尾', pool: ['kettlebell-swing'] }
+    config.goal === 'recondition' &&
+    (!focus.size || focusGroupsForExercise('kettlebell-swing').some((id) => focus.has(id)))
+      ? {
+          slot: { role: 'conditioning' as const, label: '代谢收尾', pool: ['kettlebell-swing'] },
+          slotIndex: tpl.slots.length,
+        }
       : null
-  const slots = conditioning ? [...tpl.slots, conditioning] : tpl.slots
-  const indexedSlots = slots.map((slot, slotIndex) => ({ slot, slotIndex }))
+  const indexedSlots = conditioning ? [...tplSlots, conditioning] : tplSlots
   let keptSlots = indexedSlots
-  if (config.compact && split.id === 'full') {
+  // 已按重点部位筛过一轮动作位，再套精简版可能把所选部位删空
+  if (config.compact && !focus.size && split.id === 'full') {
     // 保留原始 slotIndex，避免精简后后续动作位的打卡记录错位
     let remaining = 2
     keptSlots = [...indexedSlots]
@@ -909,13 +1002,26 @@ export function buildSession(
     }),
   }
 
+  // 限定部位后，训练日的肌肉焦点按实际保留动作重写，避免标题与内容不符
+  if (focus.size) {
+    const names: string[] = []
+    for (const item of day.exercises) {
+      for (const hit of EXERCISE_MAP.get(item.exerciseId)?.muscles ?? []) {
+        if (hit.role !== 'primary') continue
+        const zh = MUSCLE_MAP.get(hit.id)?.zh
+        if (zh && !names.includes(zh)) names.push(zh)
+      }
+    }
+    if (names.length) day.focus = names.slice(0, 4).join(' · ')
+  }
+
   return { index: safeIndex, round, phase, day, note: noteFor(phase, round) }
 }
 
-/** 全程训练序列：PLAN_ROUNDS × 每个循环的训练次数 */
+/** 全程训练序列：PLAN_ROUNDS × 每轮有效训练日数 */
 export function buildPlan(config: PlanConfig, swaps: PlanSwaps = {}): PlanSession[] {
-  const split = SPLIT_MAP.get(config.split) ?? SPLITS[0]
-  return Array.from({ length: PLAN_ROUNDS * split.days }, (_, i) =>
+  const days = resolveTemplates(config, swaps).length
+  return Array.from({ length: PLAN_ROUNDS * days }, (_, i) =>
     buildSession(config, i + 1, swaps),
   )
 }
@@ -930,7 +1036,7 @@ export type VolumeGroupType =
   | 'hamstring'
 
 export interface VolumeGroupDef {
-  id: string
+  id: FocusGroupId
   zh: string
   type: VolumeGroupType
   members: MuscleId[]
