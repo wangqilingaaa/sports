@@ -22,6 +22,7 @@ const selected = computed<Exercise | null>(() =>
 )
 
 const options = computed<Exercise[]>(() => {
+  const allowed = training.allowedExercises.value
   const q = query.value.trim().toLowerCase()
   if (!q) {
     const recent: Exercise[] = []
@@ -31,15 +32,16 @@ const options = computed<Exercise[]>(() => {
       if (seen.has(id)) continue
       seen.add(id)
       const ex = EXERCISE_MAP.get(id)
-      if (ex) recent.push(ex)
+      if (ex && allowed.has(id)) recent.push(ex)
     }
     return recent
   }
   return EXERCISES.filter(
     (ex) =>
-      ex.zh.toLowerCase().includes(q) ||
-      ex.en.toLowerCase().includes(q) ||
-      ex.aliases.some((a) => a.toLowerCase().includes(q)),
+      allowed.has(ex.id) &&
+      (ex.zh.toLowerCase().includes(q) ||
+        ex.en.toLowerCase().includes(q) ||
+        ex.aliases.some((a) => a.toLowerCase().includes(q))),
   ).slice(0, 8)
 })
 
@@ -160,7 +162,7 @@ function usePlanValues() {
     </div>
 
     <p class="free-note">
-      自由打卡不需要跟随计划动作，记录会同样计入本次训练与肌肉热图；自重动作重量填 0 即可。
+      自由打卡不需要跟随计划动作，但候选动作同样限定在「我的器械」范围内；记录会计入本次训练与肌肉热图，自重动作重量填 0 即可。
     </p>
   </section>
 </template>

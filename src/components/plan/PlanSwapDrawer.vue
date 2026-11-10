@@ -68,9 +68,11 @@ const pool = computed<Exercise[]>(() => {
     (cand.pattern === ex.pattern ? 0 : 4) +
     (cand.equipment === ex.equipment ? 0 : 2) +
     Math.abs(cand.level - ex.level) * 0.5
+  const allowed = training.allowedExercises.value
   return EXERCISES.filter(
     (cand) =>
       cand.id !== ex.id &&
+      allowed.has(cand.id) &&
       !usedElsewhere.has(cand.id) &&
       (cand.pattern === 'isolation') === isolation &&
       cand.muscles.some((hit) => hit.role === 'primary' && targets.has(hit.id)),
@@ -178,7 +180,7 @@ onBeforeUnmount(() => document.body.classList.remove('is-locked'))
               {{ current ? PATTERN_LABEL[current.pattern] : '' }}
             </div>
             <p class="swap-hint">
-              候选只保留同主动肌、同复合/孤立属性的动作；组数、次数、RPE 与休息沿用这个位的处方，
+              候选只保留「我的器械」能做、且同主动肌、同复合/孤立属性的动作；组数、次数、RPE 与休息沿用这个位的处方，
               本轮容量审计会按新动作重算。
             </p>
             <p v-if="logged" class="swap-warn">

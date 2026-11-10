@@ -278,6 +278,138 @@
   cursor: default;
 }
 
+/* ───────────── 我的器械 ───────────── */
+.gym-hint {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--ink-4);
+}
+
+.gym-panel {
+  margin: 8px 0 2px 42px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--card-2);
+}
+
+.gym-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.gym-panel-desc {
+  margin: 5px 0 0;
+  font-size: 9.5px;
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+
+.gym-panel-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.gym-warning {
+  margin: 9px 0 0;
+  padding: 6px 9px;
+  border-left: 2px solid var(--teal);
+  background: var(--card);
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+.gym-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.gym-group-name {
+  flex: 0 0 68px;
+  padding-top: 5px;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+}
+
+.gym-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gym-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+
+.gym-chip em {
+  font-style: normal;
+  font-size: 8px;
+  color: var(--ink-4);
+}
+
+.gym-chip:hover {
+  border-color: var(--line-2);
+}
+
+.gym-chip.is-on {
+  border-color: var(--teal);
+  color: var(--ink-2);
+}
+
+.gym-chip.is-on em {
+  color: var(--teal);
+}
+
+.gym-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--line-2);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--card);
+}
+
+.gym-chip.is-on .gym-check {
+  background: var(--teal);
+  border-color: var(--teal);
+}
+
+.gym-foot {
+  margin: 12px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 9.5px;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+}
+
+.gym-foot b {
+  font-weight: 500;
+  color: var(--accent);
+}
+
 /* ───────────── 主栅格 ───────────── */
 .plan-grid {
   display: grid;
@@ -2228,6 +2360,30 @@
 
   .split-note {
     padding-left: 0;
+  }
+
+  .gym-panel {
+    margin-left: 0;
+    padding: 10px 11px;
+  }
+
+  .gym-panel-head {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .gym-group {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .gym-group-name {
+    flex-basis: auto;
+    padding-top: 0;
+  }
+
+  .gym-hint {
+    display: none;
   }
 
   .deload-banner {

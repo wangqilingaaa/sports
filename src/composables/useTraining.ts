@@ -5,6 +5,7 @@ import {
   buildPlan,
   cycleDaysFor,
   DAYS_TO_SPLIT,
+  droppedSlotCount,
   LEVEL_VOLUME_SCALE,
   PHASE_VOLUME_SCALE,
   PLAN_ROUNDS,
@@ -21,6 +22,12 @@ import {
   type PlanSwaps,
   type SplitId,
 } from '@/data/training-plan'
+import {
+  DEFAULT_GYM_EQUIPMENT,
+  GYM_EQUIPMENT_IDS,
+  allowedExerciseIds,
+  type GymEquipmentId,
+} from '@/data/gym-equipment'
 import type { MuscleId } from '@/data/types'
 
 export type HeatRange = 'session' | 'recent' | 'all'
@@ -127,6 +134,7 @@ function defaultConfig(): PlanConfig {
     cycle: 1,
     compact: false,
     focus: [],
+    equipment: [...DEFAULT_GYM_EQUIPMENT],
   }
 }
 
@@ -163,11 +171,17 @@ function normalizeSwaps(raw: unknown): PlanSwaps {
   for (const session of buildPlan({ ...config.value, focus: [] })) {
     for (const item of session.day.exercises) defaults.set(item.slotKey, item.exerciseId)
   }
+  const allowed = allowedExerciseIds(config.value.equipment ?? DEFAULT_GYM_EQUIPMENT)
   const out: PlanSwaps = {}
   for (const [slotKey, exerciseId] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof exerciseId !== 'string') continue
     const defaultId = defaults.get(slotKey)
-    if (defaultId && EXERCISE_MAP.has(exerciseId) && swapCompatible(defaultId, exerciseId)) {
+    if (
+      defaultId &&
+      allowed.has(exerciseId) &&
+      EXERCISE_MAP.has(exerciseId) &&
+      swapCompatible(defaultId, exerciseId)
+    ) {
       out[slotKey] = exerciseId
     }
   }
@@ -304,6 +318,13 @@ function hydrate() {
               typeof id === 'string' && VALID_FOCUS.includes(id as FocusGroupId),
           )
         : []
+      // 旧版存档没有器械字段：默认按整份健身房清单启用
+      const savedGym = Array.isArray(c.equipment)
+        ? c.equipment.filter(
+            (id): id is GymEquipmentId => typeof id === 'string' && GYM_EQUIPMENT_IDS.has(id),
+          )
+        : []
+      config.value.equipment = savedGym.length ? savedGym : [...DEFAULT_GYM_EQUIPMENT]
       if (typeof c.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.startDate)) {
         legacyStart = c.startDate
       }
@@ -346,6 +367,12 @@ const selectedIndex = ref(1)
 const heatRange = ref<HeatRange>('session')
 
 const plan = computed(() => buildPlan(config.value, swaps.value))
+/** 当前「我的器械」能完成的动作集合：计划、替换候选、自由打卡共用同一份白名单 */
+const allowedExercises = computed(() =>
+  allowedExerciseIds(config.value.equipment ?? DEFAULT_GYM_EQUIPMENT),
+)
+/** 因缺少对应器械被略过的动作位数量（一个循环内） */
+const droppedSlots = computed(() => droppedSlotCount(config.value))
 const totalSessions = computed(() => plan.value.length)
 /** 每轮实际训练日数：限定重点部位后可能少于分化天数 */
 const cycleDays = computed(() => cycleDaysFor(config.value, swaps.value))
@@ -803,7 +830,7 @@ function clearLiftGoal(exerciseId: string) {
 
 /** 记住某个动作位换成的动作；不兼容的替换会被忽略 */
 function swapExercise(slotKey: string, exerciseId: string) {
-  if (!EXERCISE_MAP.has(exerciseId)) return
+  if (!allowedExercises.value.has(exerciseId) || !EXERCISE_MAP.has(exerciseId)) return
   const item = activeDay.value.exercises.find((entry) => entry.slotKey === slotKey)
   if (!item || !swapCompatible(item.exerciseId, exerciseId)) return
   swaps.value = { ...swaps.value, [slotKey]: exerciseId }
@@ -840,6 +867,8 @@ export function useTraining() {
     logs,
     goals,
     plan,
+    allowedExercises,
+    droppedSlots,
     totalSessions,
     cycleDays,
     activeSplit,

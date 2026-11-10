@@ -192,6 +192,12 @@ export const DEMO_SLUG: Record<string, string> = {
   'dead-hang': 'dead-hang',
   'banded-row': 'banded-row',
   'banded-monster-walk': 'banded-monster-walk',
+  /* 健身房器械清单专属动作：上游没有独立素材，沿用运动学最接近的近似帧 */
+  'plate-loaded-chest-press': 'machine-chest-press',
+  'plate-loaded-shoulder-press': 'machine-shoulder-press',
+  'perfect-squat': 'hack-squat',
+  'machine-biceps-curl': 'preacher-curl',
+  'machine-abdominal-crunch': 'cable-crunch',
 }
 
 /** 第 1 帧与第 3 帧方向相反的动作（相位 c=0 时显示第 3 帧） */

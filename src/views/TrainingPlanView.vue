@@ -19,6 +19,12 @@ import {
   type SplitId,
 } from '@/data/training-plan'
 import { MUSCLE_MAP } from '@/data/muscles'
+import {
+  DEFAULT_GYM_EQUIPMENT,
+  GYM_EQUIPMENT,
+  GYM_GROUPS,
+  type GymEquipmentId,
+} from '@/data/gym-equipment'
 import { LEVEL_LABEL } from '@/data/equipment'
 import { EXERCISE_MAP } from '@/data/exercises'
 import PlanSession from '@/components/plan/PlanSession.vue'
@@ -171,6 +177,41 @@ const focusSummary = computed(() => {
   )
   return names.length <= 4 ? names.join(' · ') : `已选 ${names.length} 个部位`
 })
+
+/* ───────────── 我的器械：计划可用的具体机型 ───────────── */
+const gymOpen = ref(false)
+const gymTotal = GYM_EQUIPMENT.length
+const gymIds = computed<GymEquipmentId[]>(() => training.config.value.equipment)
+const gymSelected = computed(() => new Set<GymEquipmentId>(gymIds.value))
+const gymCount = computed(() => gymIds.value.length)
+const gymGroups = computed(() =>
+  GYM_GROUPS.map((group) => ({
+    ...group,
+    items: GYM_EQUIPMENT.filter((item) => item.group === group.id),
+  })),
+)
+
+function isGymOn(id: GymEquipmentId): boolean {
+  return gymSelected.value.has(id)
+}
+
+/** 勾选顺序按清单固定，避免存档里的数组顺序影响界面 */
+function applyGym(ids: Set<GymEquipmentId>) {
+  const next = GYM_EQUIPMENT.filter((item) => ids.has(item.id)).map((item) => item.id)
+  // 至少保留一项，否则计划无从生成
+  if (next.length) training.setConfig({ equipment: next })
+}
+
+function toggleGym(id: GymEquipmentId) {
+  const next = new Set(gymIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  applyGym(next)
+}
+
+function setGymAll() {
+  training.setConfig({ equipment: [...DEFAULT_GYM_EQUIPMENT] })
+}
 
 function selectPhase(p: Phase) {
   training.selectedIndex.value = phaseStart(p)
@@ -404,6 +445,68 @@ onBeforeUnmount(() => {
           </div>
           <span class="control-summary">{{ focusSummary }}</span>
         </div>
+
+        <!-- ─── 我的器械：计划只会使用勾选器械能完成的动作 ─── -->
+        <div class="control-row">
+          <span class="control-key">器械</span>
+          <button
+            class="pchip is-compact"
+            :class="{ 'is-active': gymOpen }"
+            :title="`已启用 ${gymCount}/${gymTotal} 项器械`"
+            @click="gymOpen = !gymOpen"
+          >
+            <b>我的器械</b>
+            <em>{{ gymCount }}/{{ gymTotal }}</em>
+          </button>
+          <span class="gym-hint">计划只会使用已勾选器械能完成的动作</span>
+          <span class="control-summary">
+            <button class="plan-link" @click="gymOpen = !gymOpen">
+              {{ gymOpen ? '收起' : '管理' }}
+            </button>
+          </span>
+        </div>
+        <div v-if="gymOpen" class="gym-panel">
+          <div class="gym-panel-head">
+            <div>
+              <div class="plan-kicker">Equipment · 我的器械</div>
+              <p class="gym-panel-desc">
+                取消勾选后，该器械对应的动作会从训练计划、替换候选与自由打卡里一并移除；
+                动作位找不到可用动作时会自动略过，找不到同类动作时才用清单内的动作兜底。
+              </p>
+            </div>
+            <div class="gym-panel-actions">
+              <button class="plan-link" @click="setGymAll">恢复整份清单</button>
+              <button class="plan-link" @click="gymOpen = false">收起</button>
+            </div>
+          </div>
+          <p v-if="training.droppedSlots.value" class="gym-warning">
+            当前器械组合下，每轮有 {{ training.droppedSlots.value }} 个动作位因缺少对应器械被略过
+            （多为清单里没有的提踵机、罗马椅、史密斯机等动作）。
+          </p>
+          <div v-for="group in gymGroups" :key="group.id" class="gym-group">
+            <span class="gym-group-name">{{ group.zh }}</span>
+            <div class="gym-chips">
+              <button
+                v-for="item in group.items"
+                :key="item.id"
+                class="gym-chip"
+                :class="{ 'is-on': isGymOn(item.id) }"
+                :title="`${item.en} · ${item.note} · ${item.exercises.length} 个动作`"
+                :aria-pressed="isGymOn(item.id)"
+                @click="toggleGym(item.id)"
+              >
+                <span class="gym-check">{{ isGymOn(item.id) ? '✓' : '' }}</span>
+                <span>{{ item.zh }}</span>
+                <em>{{ item.exercises.length }}</em>
+              </button>
+            </div>
+          </div>
+          <p class="gym-foot">
+            当前可用动作 <b>{{ training.allowedExercises.value.size }}</b> 个 ·
+            徒手动作不占用器械 · 哑铃 / 杠铃默认配套训练凳与地面
+          </p>
+        </div>
+
         <p v-if="split.id === 'full' && focusAll" class="split-note">
           <button class="plan-link" @click="setCompact(!training.config.value.compact)">
             {{

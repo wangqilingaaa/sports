@@ -1,6 +1,7 @@
 import type { Exercise, MuscleHit, MuscleId, Role } from './types'
 import { MUSCLE_MAP } from './muscles'
 import { EXTRA_EXERCISES } from './exercises-ext'
+import { GYM_EXERCISES } from './exercises-gym'
 
 const m = (id: MuscleId, role: Role, activation: number): MuscleHit => ({ id, role, activation })
 
@@ -1922,8 +1923,8 @@ const CORE_EXERCISES: Exercise[] = [
   },
 ]
 
-/** 完整动作库：核心动作 + 从 workout-guide 素材扩充的动作 */
-export const EXERCISES: Exercise[] = [...CORE_EXERCISES, ...EXTRA_EXERCISES]
+/** 完整动作库：核心动作 + 素材扩充动作 + 健身房器械清单专属动作 */
+export const EXERCISES: Exercise[] = [...CORE_EXERCISES, ...EXTRA_EXERCISES, ...GYM_EXERCISES]
 
 /** 优先取主动肌，用于自动生成收缩说明 */
 function autoNote(ex: Exercise): string {
