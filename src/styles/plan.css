@@ -90,6 +90,7 @@
 .plan-head-side {
   display: flex;
   flex: 1;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -97,6 +98,7 @@
 
 .plan-back {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 5px;
   font-size: 10px;
@@ -114,12 +116,14 @@
 
 .plan-now {
   display: flex;
+  min-width: 0;
   align-items: baseline;
   gap: 8px;
   text-align: right;
 }
 
 .plan-now b {
+  flex: none;
   font-family: var(--serif);
   font-size: 15px;
   line-height: 1;
@@ -129,10 +133,13 @@
 }
 
 .plan-now span {
+  min-width: 0;
+  overflow: hidden;
   font-size: 9.5px;
   letter-spacing: 0.1em;
   color: var(--ink-3);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ───────────── 目标 / 水平 / 分化 ───────────── */
@@ -2338,6 +2345,30 @@
 }
 
 @media (max-width: 560px) {
+  .plan-head-side {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+  }
+
+  .plan-back {
+    align-self: flex-start;
+  }
+
+  /* 窄屏一行放不下周期与分期，拆成两行左对齐，避免撑出横向滚动 */
+  .plan-now {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    text-align: left;
+  }
+
+  .plan-now span {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
   .plan-title {
     font-size: 30px;
   }
